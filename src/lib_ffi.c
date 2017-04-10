@@ -615,7 +615,7 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
   CTState *cts = ctype_cts(L);
   CTypeID id = ffi_checkctype(L, cts, NULL);
   CTSize sz;
-  if (LJ_UNLIKELY(tviscdata(L->base) && cdataisv(cdataV(L->base)))) {
+  if (tviscdata(L->base) && cdataisv(cdataV(L->base))) {
     sz = cdatavlen(cdataV(L->base));
   } else {
     CType *ct = lj_ctype_rawref(cts, id);
@@ -623,7 +623,7 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
       sz = lj_ctype_vlsize(cts, ct, (CTSize)ffi_checkint(L, 2));
     else
       sz = ctype_hassize(ct->info) ? ct->size : CTSIZE_INVALID;
-    if (LJ_UNLIKELY(sz == CTSIZE_INVALID)) {
+    if (sz == CTSIZE_INVALID) {
       setnilV(L->top-1);
       return 1;
     }

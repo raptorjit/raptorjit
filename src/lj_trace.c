@@ -354,7 +354,7 @@ static void trace_start(jit_State *J)
 
   /* Get a new trace number. */
   traceno = trace_findfree(J);
-  if (LJ_UNLIKELY(traceno == 0)) {  /* No free trace? */
+  if (traceno == 0) {  /* No free trace? */
     lua_assert((J2G(J)->hookmask & HOOK_GC) == 0);
     lj_trace_flushall(J->L);
     J->state = LJ_TRACE_IDLE;  /* Silently ignored. */
@@ -518,7 +518,7 @@ static int trace_abort(jit_State *J)
 /* Perform pending re-patch of a bytecode instruction. */
 static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 {
-  if (LJ_UNLIKELY(J->patchpc)) {
+  if (J->patchpc) {
     if (force || J->bcskip == 0) {
       *J->patchpc = J->patchins;
       J->patchpc = NULL;
