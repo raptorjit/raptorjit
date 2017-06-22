@@ -70,5 +70,17 @@ Common ways that unsunk allocations are eliminated:
 
 ## Optimize JIT 
 
-_This will be the really fun part! Understand what JIT code looks like, how to make it more efficient, and what tricks we can use that C/C++ hackers with static compilers can't :-)_
+Here are some rough ideas for names of potential optimization techniques:
+
+- Stay "on trace"
+  - Use consistent FFI types
+  - Use branchless operations
+  - Hoist unbiased branches outside of loops
+- Create the right traces
+  - Avoid FFI type explosion
+  - Clone specialized single-use prototypes
+  - Flush traces after workload change
+- Specialize traces to eliminate instructions and break dependency chains
+  - Specialize on local variable values in low-instance-count closure
+  - Specialize on values in immutable FFI metatype
 
