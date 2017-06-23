@@ -11,7 +11,7 @@ function optimize ()
    -- Spending nontrivial time in the interpreter? That's a bug - stop it!
    if vmprofile.interpreted > 1% then
       eliminate_interpreter()
-   -- Spend time in the garbage collector? That's a bug too - stop it!
+   -- Spend time in the garbage collector? That's usually a bug too - stop it!
    elseif vmprofile.garbagecollection > 1% then
       eliminate_allocation()
    -- If you are not stuck in interpreter or GC then take a deeper look...
@@ -36,14 +36,100 @@ often a secondary effect of running interpreted.)
 
 ## Eliminate interpreter mode
 
-If your application is spending significant time in the interpreter
-then you need to look for _blacklisted_ code.
+If the application is spending time in the interpreter then we need to diagnose why. We can do this by looking for _trace aborts_ in the JIT log to see where the JIT has attempted to compile a trace and why these attempts have failed.
 
-Code is blacklisted when repeated attempts at JIT compilation all fail.
+Step-by-step:
 
-1. Identify the blacklisted code that you think is most likely to be responsible. This is probably code that is frequently called by the application. (Blacklisted code that is rarely called is unlikely to be a problem.)
-2. Look at the _trace aborts_ that made attempts to JIT this code fail. On which bytecode did they abort, and for what reason? The most common reason is that execution reached an [NYI bytecode](http://wiki.luajit.org/NYI) that the JIT cannot compile, for example creating a new closure (`FNEW`), calling a function that takes a variable number of arguments (`VARG`), calling the `print()` built-in function, etc.
-3. Rewrite the code to avoid the aborts. The new version should successfully compile. If it does not then repeat this process with the new code.
+1. Identify the relevant aborts.
+2. Diagnose their root cause.
+3. Rewrite the code to avoid the aborts.
+
+This takes some practice. Trace aborts are not always relevant to performance: if the code is only executed during startup, or is later traced successfully, then the abort may not affect overall performance.
+
+### HOWTO with LuaJIT tools
+
+Consider this example program:
+
+```lua
+function f()
+   return function () end
+end
+
+for i = 1, 1000 do
+   f()
+end
+```
+
+These three features are relevant to the JIT:
+
+1. Line 1 is a potential start of a JIT trace: a function.
+2. Line 5 is a potential start of a JIT trace: a loop.
+3. Line 2 will cause a JIT abort because it creates a new closure. Closures are created by the `FNEW` bytecode which is NYI.
+
+Here is what happens when we run with `-jv`:
+
+```
+$ luajit -jv test.lua
+[TRACE --- test.lua:5 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:5 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:1 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:5 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:1 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:5 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:1 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:5 -- NYI: bytecode 51 at test.lua:2]
+[TRACE --- test.lua:1 -- NYI: bytecode 51 at test.lua:2]
+```
+
+This shows the JIT repeatedly attempting to compile a trace, either
+from the loop at `test.lua:5` or the function at `test.lua:1`, and
+each time it aborts at `test.lua:2` with the reason `NYI: bytecode
+51`. So we can conclude that neither the loop nor the function is
+being successfully JITed because each one reaches code that cannot be
+JITed.
+
+If we run with `-jdump` we can see more detail:
+
+```
+$ luajit -jdump test.lua
+[TRACE --- test.lua:5 -- NYI: bytecode 51 at test.lua:2]
+---- TRACE 1 start test.lua:5
+0007  GGET     4   1      ; "f"
+0008  CALL     4   1   1
+0000  . FUNCF    1          ; test.lua:1
+0001  . FNEW     0   0      ; test.lua:2
+---- TRACE 1 abort test.lua:2 -- NYI: bytecode 51
+...
+```
+
+Here we see a more detailed view of the JIT starting a trace from the loop at `test.lua:5` and successfully tracing three bytecodes (`GGET`, `CALL`, FUNCF`) before aborting on the last one (`FNEW`).
+
+So what should we do? The program needs to be rewritten to avoid the trace abort. One solution would be to pre-create a closure and return that instead of creating a new one each time:
+
+```lua
+local closure = function () end
+
+function f()
+   return closure
+end
+
+for i = 1, 1000 do
+   f()
+end
+```
+
+Here is what happens now when we run with `-jv`:
+
+```
+[TRACE   1 test2.lua:7 loop]
+```
+
+Great: The JIT now successfully created a (looping) trace starting
+from the `for` loop that is now at `test2.lua:7`. Problem solved!
+
+### HOWTO with RaptorJIT tools
+
+To be written...
 
 ## Eliminate garbage collection
 
