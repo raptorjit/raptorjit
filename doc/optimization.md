@@ -102,7 +102,7 @@ $ luajit -jdump test.lua
 ...
 ```
 
-Here we see a more detailed view of the JIT starting a trace from the loop at `test.lua:5` and successfully tracing three bytecodes (`GGET`, `CALL`, FUNCF`) before aborting on the last one (`FNEW`).
+Here we see a more detailed view of the JIT starting a trace from the loop at `test.lua:5` and successfully tracing three bytecodes (`GGET`, `CALL`, `FUNCF`) before aborting on the last one (`FNEW`).
 
 So what should we do? The program needs to be rewritten to avoid the trace abort. One solution would be to pre-create a closure and return that instead of creating a new one each time:
 
@@ -124,7 +124,7 @@ Here is what happens now when we run with `-jv`:
 [TRACE   1 test2.lua:7 loop]
 ```
 
-Great: The JIT now successfully created a (looping) trace starting
+Great! The JIT now successfully created a (looping) trace starting
 from the `for` loop that is now at `test2.lua:7`. Problem solved!
 
 ### HOWTO with RaptorJIT tools
