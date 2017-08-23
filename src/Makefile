@@ -203,22 +203,9 @@ HOST_XCFLAGS+= -DLUAJIT_OS=LUAJIT_OS_LINUX
 # Files and pathnames.
 ##############################################################################
 
-DASM_DIR= ../dynasm
-DASM= $(HOST_LUA) $(DASM_DIR)/dynasm.lua
-DASM_ARCH= x64
-DASM_DASC= vm_$(DASM_ARCH).dasc
-
-BUILDVM_O= host/buildvm.o host/buildvm_asm.o host/buildvm_peobj.o \
-	   host/buildvm_lib.o host/buildvm_fold.o
-BUILDVM_T= host/buildvm
-BUILDVM_X= $(BUILDVM_T)
-
-HOST_O= $(BUILDVM_O)
-HOST_T= $(BUILDVM_T)
-
-LJVM_S= lj_vm.S
+LJVM_C= lj_vm.c
 LJVM_O= lj_vm.o
-LJVM_BOUT= $(LJVM_S)
+LJVM_BOUT= $(LJVM_C)
 LJVM_MODE= elfasm
 
 LJLIB_O= lib_base.o lib_math.o lib_bit.o lib_string.o lib_table.o \
@@ -249,8 +236,7 @@ LUAJIT_T= raptorjit
 
 ALL_T= $(LUAJIT_T) $(LUAJIT_A) $(LUAJIT_SO) $(HOST_T)
 ALL_HDRGEN= lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h \
-	    host/buildvm_arch.h
-ALL_GEN= $(LJVM_S) $(ALL_HDRGEN)
+ALL_GEN= $(ALL_HDRGEN)
 WIN_RM= *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
 ALL_RM= $(ALL_T) *.o host/*.o $(WIN_RM)
 
@@ -264,8 +250,8 @@ TARGET_DEP= $(LUAJIT_SO)
 
 Q= @
 E= @echo
-#Q=
-#E= @:
+Q=
+E= @:
 
 ##############################################################################
 # Make targets.
@@ -324,8 +310,6 @@ host/buildvm_arch.h: $(DASM_DASC) $(DASM_DEP) $(DASM_DIR)/*.lua
 	}
 	$(E) "DYNASM    $@"
 	$(Q)$(DASM) -o $@ $(DASM_DASC)
-
-host/buildvm.o: $(DASM_DIR)/dasm_*.h
 
 $(BUILDVM_T): $(BUILDVM_O)
 	$(E) "HOSTLINK  $@"
