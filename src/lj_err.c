@@ -36,7 +36,6 @@ LJ_NOINLINE static void unwindstack(lua_State *L, TValue *top)
     copyTV(L, top, L->top-1);
     L->top = top+1;
   }
-  lj_state_relimitstack(L);
 }
 
 /* Unwind until stop frame. Optionally cleanup frames. */

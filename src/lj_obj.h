@@ -156,6 +156,7 @@ typedef LJ_ALIGN(8) union TValue {
     , uint32_t hi;	/* Upper 32 bits of number. */
     )
   } u32;
+  uint8_t pad[12];
 } TValue;
 
 typedef const TValue cTValue;

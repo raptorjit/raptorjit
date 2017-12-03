@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <assert.h>
 
 #define lib_aux_c
 #define LUA_LIB
@@ -298,6 +299,7 @@ static int panic(lua_State *L)
   fputs(s ? s : "?", stderr);
   fputc(')', stderr); fputc('\n', stderr);
   fflush(stderr);
+  assert(0);
   return 0;
 }
 

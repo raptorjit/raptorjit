@@ -9,6 +9,8 @@
 #define lj_api_c
 #define LUA_CORE
 
+#include <stdio.h>
+
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_err.h"
@@ -132,7 +134,7 @@ LUA_API void lua_settop(lua_State *L, int idx)
     api_check(L, idx <= tvref(L->maxstack) - L->base);
     if (L->base + idx > L->top) {
       if (L->base + idx >= tvref(L->maxstack))
-	lj_state_growstack(L, (MSize)idx - (MSize)(L->top - L->base));
+	lj_state_checkstack(L, (MSize)idx - (MSize)(L->top - L->base));
       do { setnilV(L->top++); } while (L->top < L->base + idx);
     } else {
       L->top = L->base + idx;
@@ -1080,12 +1082,14 @@ static TValue *cpcall(lua_State *L, lua_CFunction func, void *ud)
 {
   GCfunc *fn = lj_func_newC(L, 0, getcurrenv(L));
   TValue *top = L->top;
+  printf("START cpcall\n"); fflush(stdout);
   fn->c.f = func;
   setfuncV(L, top++, fn);
   if (LJ_FR2) setnilV(top++);
   setlightudV(top++, checklightudptr(L, ud));
   cframe_nres(L->cframe) = 1+0;  /* Zero results. */
   L->top = top;
+  printf("DONE cpcall\n"); fflush(stdout);
   return top-1;  /* Now call the newly allocated C function. */
 }
 
@@ -1097,6 +1101,7 @@ LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
   api_check(L, L->status == LUA_OK || L->status == LUA_ERRERR);
   status = lj_vm_cpcall(L, func, ud, cpcall);
   if (status) hook_restore(g, oldh);
+  printf("DONE lua_cpcall\n");
   return status;
 }
 

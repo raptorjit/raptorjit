@@ -32,99 +32,14 @@
 /* Stack sizes. */
 #define LJ_STACK_MIN	LUA_MINSTACK	/* Min. stack size. */
 #define LJ_STACK_MAX	LUAI_MAXSTACK	/* Max. stack size. */
-#define LJ_STACK_START	(2*LJ_STACK_MIN)	/* Starting stack size. */
 #define LJ_STACK_MAXEX	(LJ_STACK_MAX + 1 + LJ_STACK_EXTRA)
-
-/* Explanation of LJ_STACK_EXTRA:
-**
-** Calls to metamethods store their arguments beyond the current top
-** without checking for the stack limit. This avoids stack resizes which
-** would invalidate passed TValue pointers. The stack check is performed
-** later by the function header. This can safely resize the stack or raise
-** an error. Thus we need some extra slots beyond the current stack limit.
-**
-** Most metamethods need 4 slots above top (cont, mobj, arg1, arg2) plus
-** one extra slot if mobj is not a function. Only lj_meta_tset needs 5
-** slots above top, but then mobj is always a function. So we can get by
-** with 5 extra slots.
-** LJ_FR2: We need 2 more slots for the frame PC and the continuation PC.
-*/
-
-/* Resize stack slots and adjust pointers in state. */
-static void resizestack(lua_State *L, MSize n)
-{
-  TValue *st, *oldst = tvref(L->stack);
-  ptrdiff_t delta;
-  MSize oldsize = L->stacksize;
-  MSize realsize = n + 1 + LJ_STACK_EXTRA;
-  GCobj *up;
-  lua_assert((MSize)(tvref(L->maxstack)-oldst)==L->stacksize-LJ_STACK_EXTRA-1);
-  st = (TValue *)lj_mem_realloc(L, tvref(L->stack),
-				(MSize)(oldsize*sizeof(TValue)),
-				(MSize)(realsize*sizeof(TValue)));
-  setmref(L->stack, st);
-  delta = (char *)st - (char *)oldst;
-  setmref(L->maxstack, st + n);
-  while (oldsize < realsize)  /* Clear new slots. */
-    setnilV(st + oldsize++);
-  L->stacksize = realsize;
-  if ((size_t)(mref(G(L)->jit_base, char) - (char *)oldst) < oldsize)
-    setmref(G(L)->jit_base, mref(G(L)->jit_base, char) + delta);
-  L->base = (TValue *)((char *)L->base + delta);
-  L->top = (TValue *)((char *)L->top + delta);
-  for (up = gcref(L->openupval); up != NULL; up = gcnext(up))
-    setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
-}
-
-/* Relimit stack after error, in case the limit was overdrawn. */
-void lj_state_relimitstack(lua_State *L)
-{
-  if (L->stacksize > LJ_STACK_MAXEX && L->top-tvref(L->stack) < LJ_STACK_MAX-1)
-    resizestack(L, LJ_STACK_MAX);
-}
-
-/* Try to shrink the stack (called from GC). */
-void lj_state_shrinkstack(lua_State *L, MSize used)
-{
-  if (L->stacksize > LJ_STACK_MAXEX)
-    return;  /* Avoid stack shrinking while handling stack overflow. */
-  if (4*used < L->stacksize &&
-      2*(LJ_STACK_START+LJ_STACK_EXTRA) < L->stacksize &&
-      /* Don't shrink stack of live trace. */
-      (tvref(G(L)->jit_base) == NULL || obj2gco(L) != gcref(G(L)->cur_L)))
-    resizestack(L, L->stacksize >> 1);
-}
-
-/* Try to grow stack. */
-void lj_state_growstack(lua_State *L, MSize need)
-{
-  MSize n;
-  if (L->stacksize > LJ_STACK_MAXEX)  /* Overflow while handling overflow? */
-    lj_err_throw(L, LUA_ERRERR);
-  n = L->stacksize + need;
-  if (n > LJ_STACK_MAX) {
-    n += 2*LUA_MINSTACK;
-  } else if (n < 2*L->stacksize) {
-    n = 2*L->stacksize;
-    if (n >= LJ_STACK_MAX)
-      n = LJ_STACK_MAX;
-  }
-  resizestack(L, n);
-  if (L->stacksize > LJ_STACK_MAXEX)
-    lj_err_msg(L, LJ_ERR_STKOV);
-}
-
-void lj_state_growstack1(lua_State *L)
-{
-  lj_state_growstack(L, 1);
-}
 
 /* Allocate basic stack for new state. */
 static void stack_init(lua_State *L1, lua_State *L)
 {
-  TValue *stend, *st = lj_mem_newvec(L, LJ_STACK_START+LJ_STACK_EXTRA, TValue);
+  TValue *stend, *st = lj_mem_newvec(L, LJ_STACK_MAXEX, TValue);
   setmref(L1->stack, st);
-  L1->stacksize = LJ_STACK_START + LJ_STACK_EXTRA;
+  L1->stacksize = LJ_STACK_MAXEX;
   stend = st + L1->stacksize;
   setmref(L1->maxstack, stend - LJ_STACK_EXTRA - 1);
   setthreadV(L1, st++, L1);  /* Needed for curr_funcisL() on empty stack. */
