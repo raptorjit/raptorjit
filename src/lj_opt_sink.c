@@ -217,6 +217,27 @@ static void sink_sweep_ins(jit_State *J)
   }
 }
 
+/* Remove GCSTEP after snapshot #0 if all allocations were sunk. */
+void sink_gcstep(jit_State *J)
+{
+  IRIns *ir, *irbase = IR(REF_BASE);
+  SnapShot *snap0 = &J->cur.snap[0];
+  /* GCSTEP after snapshot #0? */
+  if (IR(snap0->ref)->o != IR_GCSTEP) {
+    return;
+  }
+  /* Unsunk allocation in snapshot #0? */
+  for (ir = IR(snap0->ref); ir < irbase; ir--) {
+    if ((ir->o == IR_TNEW || ir->o == IR_TDUP ||
+         ir->o == IR_CNEW || ir->o == IR_CNEWI) &&
+        ir->r != RID_SINK) {
+      return;  /* Stop on unsunk allocation */
+    }
+  }
+  /* GCStep is redundant because no unsunk allocations in snapshot #0. */
+  IR(snap0->ref)->o = IR_NOP;
+}
+
 /* Allocation sinking and store sinking.
 **
 ** 1. Mark all non-sinkable allocations.
@@ -236,6 +257,7 @@ void lj_opt_sink(jit_State *J)
       sink_remark_phi(J);
     sink_sweep_ins(J);
   }
+  sink_gcstep(J);
 }
 
 #undef IR
