@@ -12,6 +12,7 @@ local die  = 0
 
 for i = 1, population do
    if math.random(6) == 6 then
+      jit.unlikely()
       die = die + 1
    else
       live = live + 1

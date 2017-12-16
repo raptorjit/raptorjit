@@ -8,7 +8,6 @@
 
 #include "lj_obj.h"
 
-
 #include "lj_err.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -1148,6 +1147,15 @@ static void recff_debug_getmetatable(jit_State *J, RecordFFData *rd)
   }
   emitir(IRTG(mt ? IR_NE : IR_EQ, IRT_TAB), mtref, lj_ir_knull(J, IRT_TAB));
   J->base[0] = mt ? mtref : TREF_NIL;
+}
+
+/* -- JIT library fast functions ------------------------------------------ */
+
+static uint32_t recff_jit_unlikely(jit_State *J, RecordFFData *rd)
+{
+  int i;
+  if (J->parent == 0) lj_trace_err(J, LJ_TRERR_UNLIKELY);
+  return 0;
 }
 
 /* -- Record calls to fast functions -------------------------------------- */
