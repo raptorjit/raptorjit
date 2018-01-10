@@ -23,6 +23,8 @@ typedef struct RecordIndex {
   TRef mt;		/* Metatable reference. */
   TRef mobj;		/* Metamethod object reference. */
   int idxchain;		/* Index indirections left or 0 for raw lookup. */
+  IRRef rbstart;	/* Start IR reference for rollback. */
+  TRef origtab;		/* Original / outermost table (indexed object). */
 } RecordIndex;
 
 LJ_FUNC int lj_record_objcmp(jit_State *J, TRef a, TRef b,

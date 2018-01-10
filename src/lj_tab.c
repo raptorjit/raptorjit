@@ -132,6 +132,7 @@ static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
   }
   if (hbits)
     newhpart(L, t, hbits);
+  t->sealed = 0;
   return t;
 }
 

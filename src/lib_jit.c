@@ -105,6 +105,13 @@ LJLIB_CF(jit_tracebarrier)
   return 0;
 }
 
+LJLIB_CF(jit_seal)
+{
+  GCtab *tab = lj_lib_checktab(L, 1);
+  tab->sealed = 1;
+  return 0;
+}
+
 LJLIB_PUSH(top-5) LJLIB_SET(os)
 LJLIB_PUSH(top-4) LJLIB_SET(arch)
 LJLIB_PUSH(top-3) LJLIB_SET(version_num)
