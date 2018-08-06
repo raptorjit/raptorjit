@@ -1289,6 +1289,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   IRRef rbref;
   IRType1 rbguard;
   cTValue *oldv;
+  IRRef rbstart = J->cur.nins;
 
   while (!tref_istab(ix->tab)) { /* Handle non-table lookup. */
     /* Never call raw lj_record_idx() on non-table. */
@@ -1355,6 +1356,18 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     if (t == IRT_NIL && ix->idxchain && lj_record_mm_lookup(J, ix, MM_index))
       goto handlemm;
     if (irtype_ispri(t)) res = TREF_PRI(t);  /* Canonicalize primitives. */
+
+    /* Check for sealed tables optimization. */
+    if (tabV(&ix->tabv)->sealed) {
+      /* Rollback code generated for runtime lookup. */
+      lj_ir_rollback(J, rbstart);
+      /* Guard that runtime table & key matches recording time. */
+      emitir(IRTG(IR_EQ, IRT_TAB), lj_record_constify(J, &ix->tabv), ix->tab);
+      emitir(IRTG(IR_EQ, tref_type(ix->key)), lj_record_constify(J, &ix->keyv), ix->key);
+      /* Inline the lookup result as a constant. */
+      res = lj_record_constify(J, oldv);
+    }
+
     return res;
   } else {  /* Indexed store. */
     GCtab *mt = tabref(tabV(&ix->tabv)->metatable);

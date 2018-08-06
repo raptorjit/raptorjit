@@ -426,6 +426,7 @@ typedef struct GCtab {
   uint32_t asize;	/* Size of array part (keys [0, asize-1]). */
   uint32_t hmask;	/* Hash part mask (size of hash part - 1). */
   MRef freetop;		/* Top of free elements. */
+  uint8_t sealed;	/* Is the table sealed? */
 } GCtab;
 
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
