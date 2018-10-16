@@ -191,7 +191,7 @@ Here are some borrowed words to put this branch into context:
 
 > Optimal code is not optimal to maintain. _[Vyacheslav Egorov](https://www.youtube.com/watch?v=EaLboOUG9VQ)_
 
-> If a programmer is indispensible, get rid of him as quickly as possible. _[Gerald M. Weinberg](https://www.amazon.com/Psychology-Computer-Programming-Silver-Anniversary/dp/0932633420)_
+> If a programmer is indispensable, get rid of him as quickly as possible. _[Gerald M. Weinberg](https://www.amazon.com/Psychology-Computer-Programming-Silver-Anniversary/dp/0932633420)_
 
 > If a system is to serve the creative spirit, it
 > must be entirely comprehensible to a single individual. _[Dan
