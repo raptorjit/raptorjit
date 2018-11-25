@@ -34,7 +34,7 @@ typedef struct CFrame {
   struct CFrame *save_cframe;
   BCIns *save_pc;
   lua_State *save_L;
-  /* NYI: SAVE_ERRF */
+  int save_errf;
   int save_nres;
 } CFrame;
 
@@ -288,7 +288,26 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   return 0;
 }
 
-int lj_vm_pcall(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)  { assert(0 && "NYI"); }
+int lj_vm_pcall(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef)  {
+  CFrame cf;
+  GCfunc *func;
+  cf.save_cframe = L->cframe;
+  cf.save_errf = ef;
+  cf.save_nres = nres1;
+  cf.save_L = L;
+  cf.save_pc = NULL;
+  L->cframe = &cf;
+  setgcref(G(L)->cur_L, obj2gco(L));
+  G(L)->vmstate = ~LJ_VMST_INTERP;
+  pc = (BCIns *)((newbase - L->base) << 3);
+  nargs = (L->top - newbase) + 1;
+  func = funcV(newbase-2);
+  *((BCIns **)newbase-1) = (BCIns *)pc;
+  pc = mref(func->l.pc, BCIns);
+  // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
+  L->base = newbase;
+  execute(L);
+}
 
 int lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef) { assert(0 && "NYI"); }
 void lj_vm_unwind_c(void *cframe, int errcode) { assert(0 && "NYI"); }
