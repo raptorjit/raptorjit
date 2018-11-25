@@ -51,7 +51,6 @@ static const BCIns *pc;
 ** Return true if the VM bytecode interpreter should return.
 */
 static int vm_return(lua_State *L) {
-  printf("return pc = %p\n", pc);
   if ((intptr_t)pc & FRAME_P) {
     /* Returning from a protected call. Prepend true to the results. */
     setboolV(L->base--, 1);
@@ -62,7 +61,7 @@ static int vm_return(lua_State *L) {
     /* Returning from the VM to C code. */
     {
       int i;
-      TValue *retbase = (TValue *)((intptr_t)L->base - ((intptr_t)pc & ~FRAME_TYPEP));
+      TValue *retbase = L->base - ((int)pc>>3);
       /* Move returned values down the stack. */
       for (i = 0; i < multres; i--) {
 	retbase[i] = L->base[i];
@@ -76,8 +75,30 @@ static int vm_return(lua_State *L) {
   return 0;
 }
 
+/*
+  XXX This seems to segfault when accessing the string data...
+char *tostring(lua_State *L, TValue *v)
+{
+  if (!tvisnil(v) && !tvisstr(v))
+    return strdata(lj_strfmt_obj(L, v));
+  else
+    return "...";
+}
+*/
+
+/* Simple debug utility. */
+void printstack(lua_State *L)
+{
+  int i;
+  for (i = -2; i < L->top - L->base; i++) {
+    TValue *v = L->base + i;
+    printf("[%3d] %p 0x%lx %s\n", i, v, v->u64, lj_typename(v));
+    fflush(stdout);
+  }
+}
+
 void execute(lua_State *L) {
-  VMIns *i = (VMIns *)pc;
+  VMIns *i = (VMIns *)pc++;
   switch (i->op) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
@@ -180,13 +201,12 @@ void execute(lua_State *L) {
     ** Call C function.
     */
     {
-      lua_CFunction *f = &funcV(&L->base[-2])->c.f; /* C function pointer */
-      L->top = &L->base[nargs];
-      assert(&L->top[LUA_MINSTACK] <= mref(L->maxstack, TValue));
+      lua_CFunction *f = &funcV(L->base-2)->c.f; /* C function pointer */
+      assert(&L->top[LUA_MINSTACK] <= mref(L->maxstack, TValue)); /* XXX grow */
+      assert(i->op == BC_FUNCC); /* XXX */
       G(L)->vmstate = ~LJ_VMST_C;
       (*f)(L);
       G(L)->vmstate = ~LJ_VMST_INTERP;
-      /* XXX G cur_L */
       pc = (const BCIns *)L->base[-1].u64;
       if (vm_return(L)) return;
     }
@@ -205,8 +225,8 @@ void lj_vm_call_common(lua_State *L, TValue *base, int nres, int frametype)
 }
 
 /* Entry points for ASM parts of VM. */
-void lj_vm_call(lua_State *L, TValue *base, int nres) {
-  GCfunc *f = lj_lib_checkfunc(L, 1);
+void lj_vm_call(lua_State *L, TValue *newbase, int nres) {
+  GCfunc *func;
   CFrame cf;
   /* Add to CFrame chain. */
   cf.save_cframe = L->cframe;
@@ -215,11 +235,16 @@ void lj_vm_call(lua_State *L, TValue *base, int nres) {
   cf.save_nres = nres;
   L->cframe = &cf;
   /* Setup C return PC with base address delta. */
-  L->base = base;
-  base[-1].u64 = FRAME_C + (intptr_t)base - (intptr_t)L->base;
-  nargs = L->top - L->base;
-  pc = (const BCIns *)f->l.pc.ptr64;
+  setgcref(G(L)->cur_L, obj2gco(L));
   G(L)->vmstate = ~LJ_VMST_INTERP;
+  pc = (BCIns *)(FRAME_C + ((newbase - L->base) << 3));
+  nargs = (L->top - newbase) + 1;
+  func = funcV(newbase-2);
+  //*((BCIns **)newbase-1) = (BCIns *)pc;
+  newbase[-1].u64 = (uint64_t)pc;
+  pc = mref(func->l.pc, BCIns);
+  L->base = newbase;
+  // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
   execute(L);
   L->cframe = cf.save_cframe;
 }
@@ -232,19 +257,30 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   cf.save_cframe = L->cframe;
   cf.save_L = L;
   cf.save_pc = NULL;
-  /* cf.save_errf = NULL; */
+  //cf.save_errf = NULL;
   cf.save_nres = -savestack(L, L->top); /* "Neg. delta means cframe w/o frame." */
-  L->cframe = &cf;
   /* Call with exception handler */
-  if (1) {
-  /* if ((res = _setjmp(jb)) == 0) { */
-    /* Try */
-    TValue *newbase;
-    newbase = cp(L, f, ud);
-    if (newbase) { L->base = newbase; }
-    if (f) lj_lib_checkfunc(L, 1)->c.f(L);
-    L->cframe = cf.save_cframe;
-    return 0;
+  L->cframe = &cf;
+  setgcref(G(L)->cur_L, obj2gco(L));
+  if ((res = _setjmp(jb)) == 0) { /* Try */
+    TValue *newbase = cp(L, f, ud);
+    if (newbase == NULL) {
+      return 0;
+    } else {
+      GCfunc *func;
+      VMIns i;
+      setgcref(G(L)->cur_L, obj2gco(L));
+      G(L)->vmstate = ~LJ_VMST_INTERP;
+      /* PC = frame delta + frame type */
+      pc = (BCIns *)(FRAME_CP + ((newbase - L->base) << 3));
+      nargs = (L->top - newbase) + 1;
+      // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
+      func = funcV(newbase-2);
+      *((BCIns **)newbase-1) = (BCIns *)pc;
+      pc = mref(func->l.pc, BCIns);
+      L->base = newbase;
+      execute(L);
+    }      
   } else {
     /* Catch */
     assert(0 && "NYI cpcall error");
@@ -256,7 +292,9 @@ int lj_vm_pcall(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)  { assert(0
 
 int lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef) { assert(0 && "NYI"); }
 void lj_vm_unwind_c(void *cframe, int errcode) { assert(0 && "NYI"); }
-void lj_vm_unwind_ff(void *cframe)             { assert(0 && "NYI"); }
+void lj_vm_unwind_ff(void *cframe)             {
+  
+}
 void lj_vm_unwind_c_eh(void)                   { assert(0 && "NYI"); }
 void lj_vm_unwind_ff_eh(void)                  { assert(0 && "NYI"); }
 void lj_vm_unwind_rethrow(void)                { assert(0 && "NYI"); }
@@ -264,7 +302,11 @@ void lj_vm_ffi_callback()                      { assert(0 && "NYI"); }
 void lj_vm_ffi_call(CCallState *cc)            { assert(0 && "NYI"); }
 
 /* Miscellaneous functions. */
-int lj_vm_cpuid(uint32_t f, uint32_t res[4])       { assert(0 && "NYI"); }
+int lj_vm_cpuid(uint32_t f, uint32_t res[4])       {
+  asm volatile("cpuid":"=a"(*res),"=b"(*(res+1)),
+               "=c"(*(res+2)),"=d"(*(res+3)):"a"(f));
+  return (int)res[0];
+}
 
 /* Dispatch targets for recording and hooks. */
 void lj_vm_record(void)   { assert(0 && "NYI"); }
