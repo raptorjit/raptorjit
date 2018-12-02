@@ -156,7 +156,7 @@ typedef LJ_ALIGN(8) union TValue {
     , uint32_t hi;	/* Upper 32 bits of number. */
     )
   } u32;
-  uint8_t pad[12];
+  //uint8_t pad[12];
 } TValue;
 
 typedef const TValue cTValue;
@@ -301,6 +301,7 @@ typedef struct GCproto {
   MSize sizebc;		/* Number of bytecode instructions. */
   uint32_t unused_gc64;
   GCRef gclist;
+
   MRef k;		/* Split constant array (points to the middle). */
   MRef uv;		/* Upvalue list. local slot|0x8000 or parent uv idx. */
   MSize sizekgc;	/* Number of collectable constants. */
@@ -335,7 +336,8 @@ typedef struct GCproto {
 #define PROTO_UV_LOCAL		0x8000	/* Upvalue for local slot. */
 #define PROTO_UV_IMMUTABLE	0x4000	/* Immutable upvalue. */
 
-#define proto_kgc(pt, idx) \
+
+#define proto_kgc(pt, idx)                                              \
   check_exp((uintptr_t)(intptr_t)(idx) >= (uintptr_t)-(intptr_t)(pt)->sizekgc, \
 	    gcref(mref((pt)->k, GCRef)[(idx)]))
 #define proto_knumtv(pt, idx) \

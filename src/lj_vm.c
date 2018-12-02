@@ -16,6 +16,29 @@
 #include "lj_state.h"
 #include "lj_vm.h"
 
+/*
+  XXX This seems to segfault when accessing the string data...
+char *tostring(lua_State *L, TValue *v)
+{
+  if (!tvisnil(v) && !tvisstr(v))
+    return strdata(lj_strfmt_obj(L, v));
+  else
+    return "...";
+}
+*/
+
+/* Simple debug utility. */
+void printstack(lua_State *L)
+{
+  int i;
+  //printf("stackdump with %d elems\n", L->top - L->base);
+  for (i = -2; i < L->top - L->base; i++) {
+    TValue *v = L->base + i;
+    //printf("[%3d] %p 0x%lx %s\n", i, v, v->u64, lj_typename(v));
+    fflush(stdout);
+  }
+}
+
 /* Convenient alternative representation of BCIns. */
 typedef struct VMIns {
   uint8_t op;
@@ -44,13 +67,15 @@ typedef struct CFrame {
 static global_State *gl;
 static int multres;
 static int nargs;
+static cTValue *kbase;
 static const BCIns *pc;
 
 /* Return to the previous frame.
 ** pc is already loaded with the return address.
 ** Return true if the VM bytecode interpreter should return.
 */
-static int vm_return(lua_State *L) {
+static int vm_return(lua_State *L, int resultofs, int nresults) {
+  printf("returning to %p (%d)\n", pc, (intptr_t)pc>>3);
   if ((intptr_t)pc & FRAME_P) {
     /* Returning from a protected call. Prepend true to the results. */
     setboolV(L->base--, 1);
@@ -61,12 +86,28 @@ static int vm_return(lua_State *L) {
     /* Returning from the VM to C code. */
     {
       int i;
-      TValue *retbase = L->base - ((int)pc>>3);
-      /* Move returned values down the stack. */
-      for (i = 0; i < multres; i--) {
-	retbase[i] = L->base[i];
+      TValue *src = L->base + resultofs;
+      TValue *dst = L->base - ((intptr_t)pc>>3);
+      int ncopy = nresults;
+      CFrame *cf = (CFrame*)L->cframe;
+      /* Copy results into caller frame */
+      printf("delta = %d\n", ((intptr_t)pc>>3));
+      while (ncopy-- > 0)
+        copyTV(L, dst++, src++);
+      G(L)->vmstate = ~LJ_VMST_C;
+      /* More results wanted? Pad with nil. */
+      while (multres < cf->save_nres) {
+        setnilV(dst++);
+        multres++;
       }
-      L->base = retbase;
+      /* Less results wanted? Prune stack. */
+      if (multres > cf->save_nres)
+        L->top -= multres - cf->save_nres;
+      /* Restore base to caller frame. */
+      L->base -= (intptr_t)pc>>3;
+      /* Set stack top to last returned value. */
+      L->top = dst + cf->save_nres + 2;
+      printstack(L);
       return 1;
     }
     break;
@@ -75,30 +116,13 @@ static int vm_return(lua_State *L) {
   return 0;
 }
 
-/*
-  XXX This seems to segfault when accessing the string data...
-char *tostring(lua_State *L, TValue *v)
-{
-  if (!tvisnil(v) && !tvisstr(v))
-    return strdata(lj_strfmt_obj(L, v));
-  else
-    return "...";
-}
-*/
-
-/* Simple debug utility. */
-void printstack(lua_State *L)
-{
-  int i;
-  for (i = -2; i < L->top - L->base; i++) {
-    TValue *v = L->base + i;
-    printf("[%3d] %p 0x%lx %s\n", i, v, v->u64, lj_typename(v));
-    fflush(stdout);
-  }
-}
-
 void execute(lua_State *L) {
   VMIns *i = (VMIns *)pc++;
+  printf("executing bc %d base %p top %p\n", i->op, L->base, L->top);
+  //lj_gc_fullgc(L);              /* XXX */
+  //printf("gc ok\n");
+  printstack(L);
+  assert(L->top >= L->base);
   switch (i->op) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
@@ -141,7 +165,11 @@ void execute(lua_State *L) {
   case BC_CAT:    assert(0 && "NYI BYTECODE: CAT");
   case BC_KSTR:   assert(0 && "NYI BYTECODE: KSTR");
   case BC_KCDATA: assert(0 && "NYI BYTECODE: KCDATA");
-  case BC_KSHORT: assert(0 && "NYI BYTECODE: KSHORT");
+  case BC_KSHORT:
+    //assert(L->base+i->a <= L->top);
+    setnumV(L->base + i->a, i->d);
+    printf("kshort %d = %d at %p readback %f\n", i->a, i->d, L->base+i->a, (L->base+i->a)->n);
+    break;
   case BC_KNUM:   assert(0 && "NYI BYTECODE: KNUM");
   case BC_KPRI:   assert(0 && "NYI BYTECODE: KPRI");
   case BC_KNIL:   assert(0 && "NYI BYTECODE: KNIL");
@@ -175,11 +203,44 @@ void execute(lua_State *L) {
   case BC_ISNEXT: assert(0 && "NYI BYTECODE: ISNEXT");
   case BC_RETM:   assert(0 && "NYI BYTECODE: RETM");
   case BC_RET:    assert(0 && "NYI BYTECODE: RET");
-  case BC_RET0:   assert(0 && "NYI BYTECODE: RET0");
+  case BC_RET0:
+    {
+      VMIns *pcins;
+      pc = (BCIns*)L->base[-1].u64;
+      pcins = (VMIns *)pc;
+      printf("pc = %p pcins = %p\n", pc, pcins);
+      printf("fame tupe %x %x\n", (intptr_t)pc & FRAME_TYPE, FRAME_LUA);
+      assert(((intptr_t)pc & FRAME_TYPE) != FRAME_LUA);
+      if (vm_return(L, i->a, 0)) return;
+      /*
+      multres = i->d;
+      numexpected = pcins->b;
+      while (numexpected > multres)
+        setnilV(L->base+(multres++-3));
+      L->base -= pcins->a + 2;
+      */
+    }
+    break;
   case BC_RET1:   assert(0 && "NYI BYTECODE: RET1");
-  case BC_FORI:   assert(0 && "NYI BYTECODE: FORI");
-  case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
-  case BC_FORL:   assert(0 && "NYI BYTECODE: FORL");
+    
+  case BC_FORL:   break;        /* XXX hotloop */
+  case BC_FORI:
+    {
+      TValue *state = L->base + i->a;
+      TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
+      printstack(L);
+      printf("loop index %p %f\n", idx, idx->n);
+      assert(tvisnum(idx)  && "NYI: non-number loop index");
+      assert(tvisnum(stop) && "NYI: non-number loop stop");
+      assert(tvisnum(step) && "NYI: non-number loop step");
+      setnumV(ext, idx->n);
+      /* Check for termination */
+      if ((step->n >= 0 && idx->n >= stop->n) ||
+          (step->n <  0 && stop->n >= idx->n)) {
+        pc += bc_j(i->d);
+      }
+    }
+    break;
   case BC_IFORL:  assert(0 && "NYI BYTECODE: IFORL");
   case BC_JFORL:  assert(0 && "NYI BYTECODE: JFORL");
   case BC_ITERL:  assert(0 && "NYI BYTECODE: ITERL");
@@ -192,7 +253,17 @@ void execute(lua_State *L) {
   case BC_FUNCF:  assert(0 && "NYI BYTECODE: FUNCF");
   case BC_IFUNCF: assert(0 && "NYI BYTECODE: IFUNCF");
   case BC_JFUNCF: assert(0 && "NYI BYTECODE: JFUNCF");
-  case BC_FUNCV:  assert(0 && "NYI BYTECODE: FUNCV");
+  case BC_FUNCV:
+    {
+      int framesize = i->a;
+      TValue *newbase = L->base + 2 + nargs;
+      GCproto *pt = (GCproto*)((intptr_t)(pc-1) - sizeof(GCproto));
+      // XXX kbase = mref(pt->k, cTValue);
+      newbase[-1].u64 = FRAME_VARG + ((nargs+1) << 3);
+      while (nargs < pt->numparams)
+        setnilV(L->base+(nargs++)-1);
+    }      
+    break;
   case BC_IFUNCV: assert(0 && "NYI BYTECODE: IFUNCV");
   case BC_JFUNCV: assert(0 && "NYI BYTECODE: JFUNCV");
   case BC_FUNCCW: assert(0 && "NYI BYTECODE: FUNCCW");
@@ -201,14 +272,22 @@ void execute(lua_State *L) {
     ** Call C function.
     */
     {
+      int nargs = i->d - 1;
+      int nresults, resultofs;
       lua_CFunction *f = &funcV(L->base-2)->c.f; /* C function pointer */
-      assert(&L->top[LUA_MINSTACK] <= mref(L->maxstack, TValue)); /* XXX grow */
+      assert(&L->top[LUA_MINSTACK] <= mref(L->maxstack, TValue));
       assert(i->op == BC_FUNCC); /* XXX */
+      printf("a n = %d m = %d nargs = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64, nargs);
+      fflush(stdout);
+      //L->top = L->base + nargs;
+      printf("b n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
       G(L)->vmstate = ~LJ_VMST_C;
-      (*f)(L);
+      nresults = (*f)(L);
+      printf("c n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
       G(L)->vmstate = ~LJ_VMST_INTERP;
       pc = (const BCIns *)L->base[-1].u64;
-      if (vm_return(L)) return;
+      resultofs = L->top - (L->base + nresults);
+      if (vm_return(L, resultofs, nresults)) return;
     }
     break;
   }
@@ -242,8 +321,11 @@ void lj_vm_call(lua_State *L, TValue *newbase, int nres) {
   func = funcV(newbase-2);
   //*((BCIns **)newbase-1) = (BCIns *)pc;
   newbase[-1].u64 = (uint64_t)pc;
+  printf("newbase.0 = %p\n", newbase);
   pc = mref(func->l.pc, BCIns);
   L->base = newbase;
+  L->top = L->base + nargs - 1;
+  assert(L->top >= L->base);
   // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
   execute(L);
   L->cframe = cf.save_cframe;
@@ -258,7 +340,7 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   cf.save_L = L;
   cf.save_pc = NULL;
   //cf.save_errf = NULL;
-  cf.save_nres = -savestack(L, L->top); /* "Neg. delta means cframe w/o frame." */
+  cf.save_nres = -savestack(L, L->top) / sizeof(TValue); /* "Neg. delta means cframe w/o frame." */
   /* Call with exception handler */
   L->cframe = &cf;
   setgcref(G(L)->cur_L, obj2gco(L));
@@ -269,16 +351,19 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
     } else {
       GCfunc *func;
       VMIns i;
+      printf("newbase.1 = %p\n", newbase);
+      printstack(L);
       setgcref(G(L)->cur_L, obj2gco(L));
       G(L)->vmstate = ~LJ_VMST_INTERP;
       /* PC = frame delta + frame type */
       pc = (BCIns *)(FRAME_CP + ((newbase - L->base) << 3));
+      printf("delta = %d top = %p base = %p newbase = %p stack = %p pc = %p\n", newbase-L->base, L->top, L->base, newbase, L->stack);
       nargs = (L->top - newbase) + 1;
       // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
       func = funcV(newbase-2);
-      *((BCIns **)newbase-1) = (BCIns *)pc;
-      pc = mref(func->l.pc, BCIns);
       L->base = newbase;
+      L->base[-1].u64 = (uint64_t)pc;
+      pc = mref(func->l.pc, BCIns);
       execute(L);
     }      
   } else {
@@ -299,10 +384,13 @@ int lj_vm_pcall(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef)  {
   L->cframe = &cf;
   setgcref(G(L)->cur_L, obj2gco(L));
   G(L)->vmstate = ~LJ_VMST_INTERP;
-  pc = (BCIns *)((newbase - L->base) << 3);
+  pc = (BCIns *)(FRAME_CP + ((newbase - L->base) << 3));
   nargs = (L->top - newbase) + 1;
   func = funcV(newbase-2);
-  *((BCIns **)newbase-1) = (BCIns *)pc;
+  //*((BCIns **)newbase-1) = (BCIns *)pc;
+  printf("newbase.2 = %p\n", newbase);
+  newbase[-1].u64 = (uint64_t)pc;
+  printf("saved pc = %p base = %p newbase = %p\n", pc, L->base, newbase);
   pc = mref(func->l.pc, BCIns);
   // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
   L->base = newbase;
@@ -311,9 +399,7 @@ int lj_vm_pcall(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef)  {
 
 int lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef) { assert(0 && "NYI"); }
 void lj_vm_unwind_c(void *cframe, int errcode) { assert(0 && "NYI"); }
-void lj_vm_unwind_ff(void *cframe)             {
-  
-}
+void lj_vm_unwind_ff(void *cframe)             { assert(0 && "NYI"); };
 void lj_vm_unwind_c_eh(void)                   { assert(0 && "NYI"); }
 void lj_vm_unwind_ff_eh(void)                  { assert(0 && "NYI"); }
 void lj_vm_unwind_rethrow(void)                { assert(0 && "NYI"); }

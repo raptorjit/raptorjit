@@ -18,6 +18,7 @@
 #include "luajit.h"
 
 #include "lj_arch.h"
+#include "lj_obj.h"
 
 #include <unistd.h>
 #define lua_stdin_is_tty()	isatty(0)
@@ -103,6 +104,7 @@ static int docall(lua_State *L, int narg, int clear)
   signal(SIGINT, laction);
   status = lua_pcall(L, narg, (clear ? 0 : LUA_MULTRET), base);
   signal(SIGINT, SIG_DFL);
+  printf("n = %d m = %d\n", L->base - L->top, (TValue*)L->stack.ptr64 - L->top);
   lua_remove(L, base);  /* remove traceback function */
   /* force a complete garbage collection in case of errors */
   if (status != LUA_OK) lua_gc(L, LUA_GCCOLLECT, 0);
@@ -495,6 +497,7 @@ static int pmain(lua_State *L)
 
   LUAJIT_VERSION_SYM();  /* Linker-enforced version check. */
 
+  printf("A n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   argn = collectargs(argv, &flags);
   if (argn < 0) {  /* Invalid args? */
     print_usage();
@@ -502,25 +505,33 @@ static int pmain(lua_State *L)
     return 0;
   }
 
+  printf("B n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   if ((flags & FLAGS_NOENV)) {
     lua_pushboolean(L, 1);
     lua_setfield(L, LUA_REGISTRYINDEX, "LUA_NOENV");
   }
 
   /* Stop collector during library initialization. */
+  printf("C n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   lua_gc(L, LUA_GCSTOP, 0);
+  printf("D n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   luaL_openlibs(L);
+  printf("E n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   lua_gc(L, LUA_GCRESTART, -1);
 
+  printf("F n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   createargtable(L, argv, s->argc, argn);
+  printf("G n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
 
   if (!(flags & FLAGS_NOENV)) {
     s->status = handle_luainit(L);
     if (s->status != LUA_OK) return 0;
   }
 
+  printf("H n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   if ((flags & FLAGS_VERSION)) print_version();
 
+  printf("... n = %d m = %d\n", L->base - L->top, (TValue*)L->stack.ptr64 - L->top);
   s->status = runargs(L, argv, argn);
   if (s->status != LUA_OK) return 0;
 
@@ -554,6 +565,7 @@ int main(int argc, char **argv)
   }
   smain.argc = argc;
   smain.argv = argv;
+  printf("0 n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   status = lua_cpcall(L, pmain, NULL);
   report(L, status);
   lua_close(L);

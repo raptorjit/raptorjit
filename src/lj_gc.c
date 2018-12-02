@@ -270,6 +270,9 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
   for (frame = th->base-1; frame > bot+LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     TValue *ftop = frame;
+    printf("base = %p base-1 = %p top = %p bot = %lx\n", th->base, th->base-1, th->top, th->stack);
+    printf("frame = %p *frame = \n", frame);
+    printf("frame = %p prev = %p sz = xxx\n", frame, frame_prev(frame) /*, frame_sized(frame)*/);
     if (isluafunc(fn)) ftop += funcproto(fn)->framesize;
     if (ftop > top) top = ftop;
     if (!LJ_FR2) gc_markobj(g, fn);  /* Need to mark hidden function (or L). */

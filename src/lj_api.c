@@ -1082,14 +1082,14 @@ static TValue *cpcall(lua_State *L, lua_CFunction func, void *ud)
 {
   GCfunc *fn = lj_func_newC(L, 0, getcurrenv(L));
   TValue *top = L->top;
-  printf("START cpcall\n"); fflush(stdout);
+  printf("3 n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   fn->c.f = func;
   setfuncV(L, top++, fn);
   if (LJ_FR2) setnilV(top++);
   setlightudV(top++, checklightudptr(L, ud));
   cframe_nres(L->cframe) = 1+0;  /* Zero results. */
   L->top = top;
-  printf("DONE cpcall\n"); fflush(stdout);
+  printf("4 n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   return top-1;  /* Now call the newly allocated C function. */
 }
 
@@ -1098,7 +1098,9 @@ LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
   global_State *g = G(L);
   uint8_t oldh = hook_save(g);
   int status;
+  printf("1 n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   api_check(L, L->status == LUA_OK || L->status == LUA_ERRERR);
+  printf("2 n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
   status = lj_vm_cpcall(L, func, ud, cpcall);
   if (status) hook_restore(g, oldh);
   printf("DONE lua_cpcall\n");
