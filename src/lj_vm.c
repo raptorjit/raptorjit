@@ -16,114 +16,124 @@
 #include "lj_state.h"
 #include "lj_vm.h"
 
-/*
-  XXX This seems to segfault when accessing the string data...
-char *tostring(lua_State *L, TValue *v)
-{
-  if (!tvisnil(v) && !tvisstr(v))
-    return strdata(lj_strfmt_obj(L, v));
-  else
-    return "...";
-}
-*/
+#define max(a,b) ((a)>(b) ? (a) : (b))
+#define min(a,b) ((a)<(b) ? (a) : (b))
+
+/* Forward declaration. */
+static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 
 /* Simple debug utility. */
-void printstack(lua_State *L)
+static void printstack(lua_State *L)
 {
   int i;
-  //printf("stackdump with %d elems\n", L->top - L->base);
   for (i = -2; i < L->top - L->base; i++) {
     TValue *v = L->base + i;
-    //printf("[%3d] %p 0x%lx %s\n", i, v, v->u64, lj_typename(v));
+    printf("[%3d] %p 0x%lx %s\n", i, v, v->u64, lj_typename(v));
     fflush(stdout);
   }
 }
 
-/* Convenient alternative representation of BCIns. */
-typedef struct VMIns {
-  uint8_t op;
-  uint8_t a;
-  union {
-    struct {
-      uint8_t b;
-      uint8_t c;
-    };
-    uint16_t d;
-  };
-} VMIns;
+/* -- Virtual machine registers ------------------------------------------- */
 
-/* Chain of stack-allocated C frame descriptors. */
-typedef struct CFrame {
-  struct CFrame *save_cframe;
-  BCIns *save_pc;
-  lua_State *save_L;
-  int save_errf;
-  int save_nres;
-} CFrame;
+/* The "registers" in the virtual machine are simply some important
+ * values that frequently instructions manipulate. We give these
+ * values short names so that it is easier to talk about what each
+ * instruction does in terms of the registers that it manipulates.
+ * 
+ * We provide macros to abstract over the way each register is
+ * represented. We refer to each register by a NAME whether it is
+ * represented by a global variable, a slot in the lua_State struct,
+ * etc.
+ */
 
-/* 
-** Registers
-*/
+/* Backing variables for certain registers. */
 static global_State *gl;
 static int multres;
 static int nargs;
 static cTValue *kbase;
 static const BCIns *pc;
 
-/* Return to the previous frame.
-** pc is already loaded with the return address.
-** Return true if the VM bytecode interpreter should return.
-*/
-static int vm_return(lua_State *L, int resultofs, int nresults) {
-  printf("returning to %p (%d)\n", pc, (intptr_t)pc>>3);
-  if ((intptr_t)pc & FRAME_P) {
-    /* Returning from a protected call. Prepend true to the results. */
-    setboolV(L->base--, 1);
-    multres++;
-  }
-  switch (FRAME_TYPE & (intptr_t)pc) {
-  case FRAME_C:
-    /* Returning from the VM to C code. */
-    {
-      int i;
-      TValue *src = L->base + resultofs;
-      TValue *dst = L->base - ((intptr_t)pc>>3);
-      int ncopy = nresults;
-      CFrame *cf = (CFrame*)L->cframe;
-      /* Copy results into caller frame */
-      printf("delta = %d\n", ((intptr_t)pc>>3));
-      while (ncopy-- > 0)
-        copyTV(L, dst++, src++);
-      G(L)->vmstate = ~LJ_VMST_C;
-      /* More results wanted? Pad with nil. */
-      while (multres < cf->save_nres) {
-        setnilV(dst++);
-        multres++;
-      }
-      /* Less results wanted? Prune stack. */
-      if (multres > cf->save_nres)
-        L->top -= multres - cf->save_nres;
-      /* Restore base to caller frame. */
-      L->base -= (intptr_t)pc>>3;
-      /* Set stack top to last returned value. */
-      L->top = dst + cf->save_nres + 2;
-      printstack(L);
-      return 1;
-    }
-    break;
-  }
-  assert(0);
-  return 0;
-}
+/* Program counter (PC) register stores the address of the next
+ * instruction to run after the current instruction finishes.
+ *
+ * Most instructions simply increment the program counter. Branch and
+ * function call instructions load new values to make a jump.
+ */
+#define PC pc
 
+/* BASE (base stack slot) is the first stack slot for use by the
+ * current stack frame.
+ *
+ * BASE[N>=0] holds the Nth local value accessible in the current
+ * function call. These slots include function arguments, local
+ * variables, and temporary values.
+ *
+ * BASE[-1] encodes the state needed to return to the previous frame.
+ * BASE[-2] holds a reference to the currently running function.
+ *
+ * See lj_frame.h for more details of how call frames are linked.
+ */
+#define BASE (L->base)
+
+/* TOP (top stack frame) is the last valid stack slot.
+ *
+ * The values BASE..TOP are the local values within the stack frame
+ * that are typically referenced as instruction operands. 
+ */
+#define TOP (L->top)
+
+/* NARGS (number of arguments) register specifies the number of fixed
+ * arguments in a function call.
+ *
+ * NARGS is set by function calling instructions (e.g. CALL) and then
+ * read by function header instructions (e.g. FUNCF).
+ */
+#define NARGS nargs
+
+/* MULTRES (multiple results) register specifies the number of values
+ * provided by a multiple-valued instruction. The multiple values are
+ * counted separately from (in addition to) any fixed values.
+ *
+ * MULTRES is set both by multiple value call instructions (e.g.
+ * CALLM) and by multiple value return instructions (e.g. RETM).
+ */
+/* XXX Rename to e.g. "MULTVAL" since this is used for both results and arguments? */
+#define MULTRES multres
+
+/* KBASE (constant base) register specifies the start address of the
+ * constant pool for the currently executing Lua function. When
+ * instructions reference a constant by index (e.g. KSTR) then that
+ * index refers to the object at KBASE[index].
+ */
+#define KBASE kbase
+
+/* STATE describes what kind of code the virtual machine is running.
+ *
+ * STATE=<0 is a complemented value from the LJ_VMST enum e.g.
+ * ~LJ_VMST_INTERP or ~LJ_VMST_GC or ~LJ_VMST_C.
+ *
+ * STATE>0 is the number of the trace whose machine code is running.
+ */
+#define STATE (G(L)->vmstate)
+
+/* Registers OP, A, B, C, and D are loaded with the opcode and
+ * operands of the current instruction. Exactly which of these
+ * registers contains a valid value varies between different
+ * instructions.
+ *
+ * Note: Changing PC does not automatically update these registers.
+ */
+#define OP bc_op(i)
+#define A  bc_a(i)
+#define B  bc_b(i)
+#define C  bc_c(i)
+#define D  bc_d(i)
+
+
+/* Execute virtual machine instructions in a tail-recursive loop. */
 void execute(lua_State *L) {
-  VMIns *i = (VMIns *)pc++;
-  printf("executing bc %d base %p top %p\n", i->op, L->base, L->top);
-  //lj_gc_fullgc(L);              /* XXX */
-  //printf("gc ok\n");
-  printstack(L);
-  assert(L->top >= L->base);
-  switch (i->op) {
+  BCIns i = *PC++;
+  switch (OP) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
   case BC_ISLE:   assert(0 && "NYI BYTECODE: ISLE");
@@ -166,9 +176,8 @@ void execute(lua_State *L) {
   case BC_KSTR:   assert(0 && "NYI BYTECODE: KSTR");
   case BC_KCDATA: assert(0 && "NYI BYTECODE: KCDATA");
   case BC_KSHORT:
-    //assert(L->base+i->a <= L->top);
-    setnumV(L->base + i->a, i->d);
-    printf("kshort %d = %d at %p readback %f\n", i->a, i->d, L->base+i->a, (L->base+i->a)->n);
+    /* BASE[A] = D */
+    setnumV(BASE+A, D);
     break;
   case BC_KNUM:   assert(0 && "NYI BYTECODE: KNUM");
   case BC_KPRI:   assert(0 && "NYI BYTECODE: KPRI");
@@ -205,31 +214,26 @@ void execute(lua_State *L) {
   case BC_RET:    assert(0 && "NYI BYTECODE: RET");
   case BC_RET0:
     {
-      VMIns *pcins;
-      pc = (BCIns*)L->base[-1].u64;
-      pcins = (VMIns *)pc;
-      printf("pc = %p pcins = %p\n", pc, pcins);
-      printf("fame tupe %x %x\n", (intptr_t)pc & FRAME_TYPE, FRAME_LUA);
-      assert(((intptr_t)pc & FRAME_TYPE) != FRAME_LUA);
-      if (vm_return(L, i->a, 0)) return;
-      /*
-      multres = i->d;
-      numexpected = pcins->b;
-      while (numexpected > multres)
-        setnilV(L->base+(multres++-3));
-      L->base -= pcins->a + 2;
-      */
+      int resultofs = A;
+      uint64_t link = BASE[-1].u64;
+      MULTRES = D-1;
+      switch (link & FRAME_TYPE) {
+      case FRAME_LUA: assert(0 && "NYI: Return to Lua frame");
+      case FRAME_CONT: assert(0 && "NYI: Return to Continuation frame");
+      case FRAME_VARG: assert(0 && "NYI: Return to vararg frame");
+      case FRAME_C:
+        if (vm_return(L, link, resultofs, 0)) return;
+      }
     }
     break;
   case BC_RET1:   assert(0 && "NYI BYTECODE: RET1");
-    
   case BC_FORL:   break;        /* XXX hotloop */
+  case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
+  case BC__MAX:   assert(0 && "Illegal bytecode: BC__MAX"); /* Suppress warning */
   case BC_FORI:
     {
-      TValue *state = L->base + i->a;
+      TValue *state = BASE + A;
       TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
-      printstack(L);
-      printf("loop index %p %f\n", idx, idx->n);
       assert(tvisnum(idx)  && "NYI: non-number loop index");
       assert(tvisnum(stop) && "NYI: non-number loop stop");
       assert(tvisnum(step) && "NYI: non-number loop step");
@@ -237,7 +241,7 @@ void execute(lua_State *L) {
       /* Check for termination */
       if ((step->n >= 0 && idx->n >= stop->n) ||
           (step->n <  0 && stop->n >= idx->n)) {
-        pc += bc_j(i->d);
+        pc += bc_j(D);
       }
     }
     break;
@@ -255,8 +259,8 @@ void execute(lua_State *L) {
   case BC_JFUNCF: assert(0 && "NYI BYTECODE: JFUNCF");
   case BC_FUNCV:
     {
-      int framesize = i->a;
-      TValue *newbase = L->base + 2 + nargs;
+      //int framesize = A;
+      TValue *newbase = BASE + 2 + NARGS;
       GCproto *pt = (GCproto*)((intptr_t)(pc-1) - sizeof(GCproto));
       // XXX kbase = mref(pt->k, cTValue);
       newbase[-1].u64 = FRAME_VARG + ((nargs+1) << 3);
@@ -272,22 +276,16 @@ void execute(lua_State *L) {
     ** Call C function.
     */
     {
-      int nargs = i->d - 1;
       int nresults, resultofs;
-      lua_CFunction *f = &funcV(L->base-2)->c.f; /* C function pointer */
-      assert(&L->top[LUA_MINSTACK] <= mref(L->maxstack, TValue));
-      assert(i->op == BC_FUNCC); /* XXX */
-      printf("a n = %d m = %d nargs = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64, nargs);
-      fflush(stdout);
-      //L->top = L->base + nargs;
-      printf("b n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
-      G(L)->vmstate = ~LJ_VMST_C;
+      lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
+      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
+      assert(OP == BC_FUNCC); /* XXX */
+      TOP = BASE + NARGS;
+      STATE = ~LJ_VMST_C;
       nresults = (*f)(L);
-      printf("c n = %d m = %d\n", L->top - L->base, L->top - (TValue*)L->stack.ptr64);
-      G(L)->vmstate = ~LJ_VMST_INTERP;
-      pc = (const BCIns *)L->base[-1].u64;
-      resultofs = L->top - (L->base + nresults);
-      if (vm_return(L, resultofs, nresults)) return;
+      STATE = ~LJ_VMST_INTERP;
+      resultofs = TOP - (BASE + nresults);
+      if (vm_return(L, BASE[-1].u64, resultofs, nresults)) return;
     }
     break;
   }
@@ -295,106 +293,123 @@ void execute(lua_State *L) {
   execute(L);
 }
 
-/* 
-** Entry points declared in lj_vm.h
-**/
+
+/* -- Return handling ----------------------------------------------------- */
 
-void lj_vm_call_common(lua_State *L, TValue *base, int nres, int frametype)
+/* Return to the previous frame.
+ *
+ * Requires that PC is loaded with the return address.
+ *
+ * Ensures that...
+ *   BASE is restored to the base frame of the previous stack frame.
+ *   Return values are copied to BASE..BASE+NRESULTS+MULTRES.
+ *
+ * Returns true if the virtual machine should 'return' on the C stack
+ * i.e. if we are returning from this invocation of the bytecode interpreter.
+ */
+static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
+  switch (link & FRAME_TYPE) {
+  case FRAME_C:
+    /* Returning from the VM to C code. */
+    {
+      CFrame *cf = (CFrame*)L->cframe;
+      TValue *src = BASE + resultofs;
+      TValue *dst = BASE - (link>>3);
+      /* Push TRUE for successful return from a pcall.  */
+      if (link & FRAME_P) setboolV(dst++, 1);
+      /* How many of our return values does the caller want? */
+      int ncopy = min(nresults, cf->nresults);
+      /* How many further values is the caller expecting? */
+      int npad  = max(cf->nresults - nresults, 0);
+      assert(cf->nresults>=0);
+      STATE = ~LJ_VMST_C;
+      /* Copy results into caller frame */
+      while (ncopy-- > 0) copyTV(L, dst++, src++);
+      while (npad--  > 0) setnilV(dst++);
+      /* Set BASE..TOP to the returned values. */
+      TOP = dst + 1;
+      BASE -= (intptr_t)link>>3;
+      return 1;
+    }
+    break;
+  }
+  assert(0 && "NYI: Unsupported case in vm_return");
+  return 0;
+}
+
+
+/* -- API functions ------------------------------------------------------- */
+
+/* Call a Lua function from C. */
+int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
 {
-}
-
-/* Entry points for ASM parts of VM. */
-void lj_vm_call(lua_State *L, TValue *newbase, int nres) {
-  GCfunc *func;
-  CFrame cf;
-  /* Add to CFrame chain. */
-  cf.save_cframe = L->cframe;
-  cf.save_L = L;
-  cf.save_pc = NULL;
-  cf.save_nres = nres;
-  L->cframe = &cf;
-  /* Setup C return PC with base address delta. */
-  setgcref(G(L)->cur_L, obj2gco(L));
-  G(L)->vmstate = ~LJ_VMST_INTERP;
-  pc = (BCIns *)(FRAME_C + ((newbase - L->base) << 3));
-  nargs = (L->top - newbase) + 1;
-  func = funcV(newbase-2);
-  //*((BCIns **)newbase-1) = (BCIns *)pc;
-  newbase[-1].u64 = (uint64_t)pc;
-  printf("newbase.0 = %p\n", newbase);
-  pc = mref(func->l.pc, BCIns);
-  L->base = newbase;
-  L->top = L->base + nargs - 1;
-  assert(L->top >= L->base);
-  // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
-  execute(L);
-  L->cframe = cf.save_cframe;
-}
-
-int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) { 
-  CFrame cf;
-  jmp_buf jb;
   int res;
-  /* Add to CFrame chain. */
-  cf.save_cframe = L->cframe;
-  cf.save_L = L;
-  cf.save_pc = NULL;
-  //cf.save_errf = NULL;
-  cf.save_nres = -savestack(L, L->top) / sizeof(TValue); /* "Neg. delta means cframe w/o frame." */
-  /* Call with exception handler */
+  GCfunc *func;
+  /* Add new CFrame to the chain. */
+  CFrame cf = { L->cframe, L, nres };
+  //assert(nres >= 0 && "NYI: LUA_MULTRET");
   L->cframe = &cf;
+  /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
-  if ((res = _setjmp(jb)) == 0) { /* Try */
+  /* Set return frame link. */
+  newbase[-1].u64 = (p ? FRAME_CP : FRAME_C) + ((newbase - BASE) << 3);
+  /* Setup VM state for callee. */
+  STATE = ~LJ_VMST_INTERP;
+  NARGS = (TOP - newbase);
+  BASE = newbase;
+  TOP = BASE + NARGS;
+  /* Branch and execute callee. */
+  func = funcV(newbase-2);
+  PC = mref(func->l.pc, BCIns);
+  /* Setup "catch" jump buffer for a protected call. */
+  if ((res = _setjmp(cf.jb)) == 0) {
+    /* Try */
+    execute(L);
+  } else {
+    /* Catch */
+    assert(0 && "NYI: Catch exception from Lua call");
+  }
+  /* Unlink C frame. */
+  L->cframe = cf.previous;
+  /* XXX */
+  return LUA_OK;
+}
+
+/* Call a Lua function object. */
+void lj_vm_call(lua_State *L, TValue *newbase, int nres) {
+  luacall(L, 0, newbase, nres-1, 0); /* -1 to compensate for lj_api +1 */
+}
+
+/* Call a Lua function object with a protected (error-handling) stack
+ * frame.
+ */
+int lj_vm_pcall(lua_State *L, TValue *newbase, int nres, ptrdiff_t ef)  {
+  luacall(L, 1, newbase, nres-1, ef);
+}
+
+/* Call a C function with a protected (error-handling) stack frame. */
+int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) { 
+  int res;
+  /* "Neg. delta means cframe w/o frame." */
+  int nresults = -savestack(L, L->top) / sizeof(TValue);
+  /* Add to CFrame chain. */
+  CFrame cf = { L->cframe, L, nresults };
+  L->cframe = &cf;
+  /* Reference the now-current lua_State. */
+  setgcref(G(L)->cur_L, obj2gco(L));
+  if ((res = _setjmp(cf.jb)) == 0) {
+    /* Try */
     TValue *newbase = cp(L, f, ud);
     if (newbase == NULL) {
       return 0;
     } else {
-      GCfunc *func;
-      VMIns i;
-      printf("newbase.1 = %p\n", newbase);
-      printstack(L);
-      setgcref(G(L)->cur_L, obj2gco(L));
-      G(L)->vmstate = ~LJ_VMST_INTERP;
-      /* PC = frame delta + frame type */
-      pc = (BCIns *)(FRAME_CP + ((newbase - L->base) << 3));
-      printf("delta = %d top = %p base = %p newbase = %p stack = %p pc = %p\n", newbase-L->base, L->top, L->base, newbase, L->stack);
-      nargs = (L->top - newbase) + 1;
-      // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
-      func = funcV(newbase-2);
-      L->base = newbase;
-      L->base[-1].u64 = (uint64_t)pc;
-      pc = mref(func->l.pc, BCIns);
-      execute(L);
+      return luacall(L, 0, newbase, nresults, 0);
     }      
   } else {
     /* Catch */
     assert(0 && "NYI cpcall error");
   }
   return 0;
-}
-
-int lj_vm_pcall(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef)  {
-  CFrame cf;
-  GCfunc *func;
-  cf.save_cframe = L->cframe;
-  cf.save_errf = ef;
-  cf.save_nres = nres1;
-  cf.save_L = L;
-  cf.save_pc = NULL;
-  L->cframe = &cf;
-  setgcref(G(L)->cur_L, obj2gco(L));
-  G(L)->vmstate = ~LJ_VMST_INTERP;
-  pc = (BCIns *)(FRAME_CP + ((newbase - L->base) << 3));
-  nargs = (L->top - newbase) + 1;
-  func = funcV(newbase-2);
-  //*((BCIns **)newbase-1) = (BCIns *)pc;
-  printf("newbase.2 = %p\n", newbase);
-  newbase[-1].u64 = (uint64_t)pc;
-  printf("saved pc = %p base = %p newbase = %p\n", pc, L->base, newbase);
-  pc = mref(func->l.pc, BCIns);
-  // XXX checkfunc LFUNC:RB, ->vmeta_call	// Ensure KBASE defined and != BASE.
-  L->base = newbase;
-  execute(L);
 }
 
 int lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef) { assert(0 && "NYI"); }

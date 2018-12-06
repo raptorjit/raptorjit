@@ -12,6 +12,7 @@
 #include "lua.h"
 #include "lj_def.h"
 #include "lj_arch.h"
+#include <setjmp.h>
 
 /* -- Memory references (32 bit address space) ---------------------------- */
 
@@ -545,6 +546,24 @@ typedef struct global_State {
   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
 } global_State;
 
+/* CFrames are chained structures that describe the C stack from on
+ * which they are allocated. Their purpose is error handling. If a Lua
+ * exception occurs then the CFrames chain can be traversed to
+ * transfer control to the C stack frame that is responsible for
+ * handling the error.
+ *
+ * Exception handling is managed on the C stack instead of the Lua
+ * stack so that it is possible to throw and catch Lua exceptions from
+ * both C and Lua code in an interoperable way.
+ */
+typedef struct CFrame {
+  struct CFrame *previous;
+  lua_State *L;
+  int nresults;
+  volatile int status;
+  jmp_buf jb;
+} CFrame;
+
 #define mainthread(g)	(&gcref(g->mainthref)->th)
 #define niltv(L) \
   check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
@@ -577,7 +596,7 @@ struct lua_State {
   MRef stack;		/* Stack base. */
   GCRef openupval;	/* List of open upvalues in the stack. */
   GCRef env;		/* Thread environment (table of globals). */
-  void *cframe;		/* End of C stack frame chain. */
+  CFrame *cframe;	/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
 };
 
