@@ -15,7 +15,12 @@
 #include "lj_obj.h"
 #include "lj_state.h"
 #include "lj_vm.h"
+#include "lj_tab.h"
+#include "lj_meta.h"
 
+#define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%d\n", name, A, B, C, D)
+
+#define neg(n) (-1 - (n))
 #define max(a,b) ((a)>(b) ? (a) : (b))
 #define min(a,b) ((a)<(b) ? (a) : (b))
 
@@ -23,6 +28,7 @@
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 
 /* Simple debug utility. */
+#if 0
 static void printstack(lua_State *L)
 {
   int i;
@@ -32,6 +38,7 @@ static void printstack(lua_State *L)
     fflush(stdout);
   }
 }
+#endif
 
 /* -- Virtual machine registers ------------------------------------------- */
 
@@ -47,10 +54,9 @@ static void printstack(lua_State *L)
  */
 
 /* Backing variables for certain registers. */
-static global_State *gl;
 static int multres;
 static int nargs;
-static cTValue *kbase;
+static void *kbase;
 static const BCIns *pc;
 
 /* Program counter (PC) register stores the address of the next
@@ -100,10 +106,16 @@ static const BCIns *pc;
 /* XXX Rename to e.g. "MULTVAL" since this is used for both results and arguments? */
 #define MULTRES multres
 
-/* KBASE (constant base) register specifies the start address of the
- * constant pool for the currently executing Lua function. When
- * instructions reference a constant by index (e.g. KSTR) then that
- * index refers to the object at KBASE[index].
+/* KBASE (constant base) register specifies the base address of the
+ * array of constants that can be referenced by instructions. The
+ * constants are specific to each function definition (prototype.) 
+ *
+ * The array is divided into two parts: pointer constants (GCobj*) at
+ * negative indices and tagged-value (TValue) constants at
+ * non-negative indecies. Specifically,
+ *
+ * KBASE[N>=0] holds the Nth TValue constant.
+ * KBASE[N<0] holds the ~Nth (bitwise complement of N) GCptr* constant.
  */
 #define KBASE kbase
 
@@ -130,9 +142,27 @@ static const BCIns *pc;
 #define D  bc_d(i)
 
 
+/* -- Utility functions --------------------------------------------------- */
+
+/* Return the nth constant GC object. */
+static inline const GCobj* kgc(int n)
+{
+  return *((const GCobj**)KBASE-1-n);
+}
+
+static inline void branchPC(int offset)
+{
+  PC += offset - BCBIAS_J;
+}
+
+/* Reference the nth constant GC object with known type. */
+#define kgcref(n, type) ((type *)kgc(n))
+
+
 /* Execute virtual machine instructions in a tail-recursive loop. */
 void execute(lua_State *L) {
   BCIns i = *PC++;
+  //printf("OP=%d A=%d B=%d C=%d D=%d\n", OP, A, B, C, D);
   switch (OP) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
@@ -148,11 +178,24 @@ void execute(lua_State *L) {
   case BC_ISNEP:  assert(0 && "NYI BYTECODE: ISNEP");
   case BC_ISTC:   assert(0 && "NYI BYTECODE: ISTC");
   case BC_ISFC:   assert(0 && "NYI BYTECODE: ISFC");
-  case BC_IST:    assert(0 && "NYI BYTECODE: IST");
+  case BC_IST:
+    /* IST: Take following JMP instruction if D is true. */
+    TRACE("IST");
+    {
+      int flag = tvistruecond(BASE+D);
+      /* Advance to jump instruction. */
+      i = *PC++;
+      if (flag) branchPC(D);
+    }
+    break;
   case BC_ISF:    assert(0 && "NYI BYTECODE: ISF");
   case BC_ISTYPE: assert(0 && "NYI BYTECODE: ISTYPE");
   case BC_ISNUM:  assert(0 && "NYI BYTECODE: ISNUM");
-  case BC_MOV:    assert(0 && "NYI BYTECODE: MOV");
+  case BC_MOV:
+    TRACE("MOV");
+    /* MOV: A = dst; D = src */
+    copyTV(L, BASE+A, BASE+D);
+    break;
   case BC_NOT:    assert(0 && "NYI BYTECODE: NOT");
   case BC_UNM:    assert(0 && "NYI BYTECODE: UNM");
   case BC_LEN:    assert(0 && "NYI BYTECODE: LEN");
@@ -173,9 +216,12 @@ void execute(lua_State *L) {
   case BC_MODVV:  assert(0 && "NYI BYTECODE: MODVV");
   case BC_POW:    assert(0 && "NYI BYTECODE: POW");
   case BC_CAT:    assert(0 && "NYI BYTECODE: CAT");
-  case BC_KSTR:   assert(0 && "NYI BYTECODE: KSTR");
+  case BC_KSTR:
+    setgcVraw(BASE+A, kgcref(D, GCobj), LJ_TSTR);
+    break;
   case BC_KCDATA: assert(0 && "NYI BYTECODE: KCDATA");
   case BC_KSHORT:
+    TRACE("KSHORT");
     /* BASE[A] = D */
     setnumV(BASE+A, D);
     break;
@@ -191,10 +237,40 @@ void execute(lua_State *L) {
   case BC_FNEW:   assert(0 && "NYI BYTECODE: FNEW");
   case BC_TNEW:   assert(0 && "NYI BYTECODE: TNEW");
   case BC_TDUP:   assert(0 && "NYI BYTECODE: TDUP");
-  case BC_GGET:   assert(0 && "NYI BYTECODE: GGET");
+  case BC_GGET:
+    TRACE("GGET");
+    /* A = _G[D] */
+    {
+      GCfunc *fn = funcV(BASE-2);
+      GCtab *env = tabref(fn->l.env);
+      GCstr *key = kgcref(D, GCstr);
+      cTValue *tv = lj_tab_getstr(env, key);
+      assert(tv && !tvisnil(tv));
+      copyTV(L, BASE+A, tv);
+      break;
+    }
   case BC_GSET:   assert(0 && "NYI BYTECODE: GSET");
   case BC_TGETV:  assert(0 && "NYI BYTECODE: TGETV");
-  case BC_TGETS:  assert(0 && "NYI BYTECODE: TGETS");
+  case BC_TGETS:
+    TRACE("TGETS");
+    {
+      TValue *o = BASE+B;
+      cTValue *res;
+      GCstr *key = kgcref(C, GCstr);
+      if (tvistab(o)) {
+        GCtab *tab = tabV(o);
+        res = lj_tab_getstr(tab, key);
+      } else {
+        TValue tvkey;
+        /* Convert key to tagged value. */
+        setgcVraw(&tvkey, obj2gco(key), LJ_TSTR);
+        // XXX SAVE_L
+        // XXX SAVE_PC
+        res = lj_meta_tget(L, o, &tvkey);
+      }
+      copyTV(L, BASE+A, res);
+      break;
+    }
   case BC_TGETB:  assert(0 && "NYI BYTECODE: TGETB");
   case BC_TGETR:  assert(0 && "NYI BYTECODE: TGETR");
   case BC_TSETV:  assert(0 && "NYI BYTECODE: TSETV");
@@ -213,6 +289,7 @@ void execute(lua_State *L) {
   case BC_RETM:   assert(0 && "NYI BYTECODE: RETM");
   case BC_RET:    assert(0 && "NYI BYTECODE: RET");
   case BC_RET0:
+    TRACE("RET0");
     {
       int resultofs = A;
       uint64_t link = BASE[-1].u64;
@@ -227,10 +304,13 @@ void execute(lua_State *L) {
     }
     break;
   case BC_RET1:   assert(0 && "NYI BYTECODE: RET1");
-  case BC_FORL:   break;        /* XXX hotloop */
+  case BC_FORL:
+    TRACE("FORL");
+    break;        /* XXX hotloop */
   case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
   case BC__MAX:   assert(0 && "Illegal bytecode: BC__MAX"); /* Suppress warning */
   case BC_FORI:
+    TRACE("FORI");
     {
       TValue *state = BASE + A;
       TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
@@ -258,11 +338,11 @@ void execute(lua_State *L) {
   case BC_IFUNCF: assert(0 && "NYI BYTECODE: IFUNCF");
   case BC_JFUNCF: assert(0 && "NYI BYTECODE: JFUNCF");
   case BC_FUNCV:
+    TRACE("FUNCV");
     {
-      //int framesize = A;
       TValue *newbase = BASE + 2 + NARGS;
-      GCproto *pt = (GCproto*)((intptr_t)(pc-1) - sizeof(GCproto));
-      // XXX kbase = mref(pt->k, cTValue);
+      GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+      KBASE = mref(pt->k, void);
       newbase[-1].u64 = FRAME_VARG + ((nargs+1) << 3);
       while (nargs < pt->numparams)
         setnilV(L->base+(nargs++)-1);
@@ -272,6 +352,7 @@ void execute(lua_State *L) {
   case BC_JFUNCV: assert(0 && "NYI BYTECODE: JFUNCV");
   case BC_FUNCCW: assert(0 && "NYI BYTECODE: FUNCCW");
   case BC_FUNCC:
+    TRACE("FUNCC");
     /* 
     ** Call C function.
     */
@@ -384,7 +465,7 @@ void lj_vm_call(lua_State *L, TValue *newbase, int nres) {
  * frame.
  */
 int lj_vm_pcall(lua_State *L, TValue *newbase, int nres, ptrdiff_t ef)  {
-  luacall(L, 1, newbase, nres-1, ef);
+  return luacall(L, 1, newbase, nres-1, ef);
 }
 
 /* Call a C function with a protected (error-handling) stack frame. */
