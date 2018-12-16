@@ -17,6 +17,7 @@
 #include "lj_vm.h"
 #include "lj_tab.h"
 #include "lj_meta.h"
+#include "lj_func.h"
 
 #define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%d\n", name, A, B, C, D)
 
@@ -162,7 +163,6 @@ static inline void branchPC(int offset)
 /* Execute virtual machine instructions in a tail-recursive loop. */
 void execute(lua_State *L) {
   BCIns i = *PC++;
-  //printf("OP=%d A=%d B=%d C=%d D=%d\n", OP, A, B, C, D);
   switch (OP) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
@@ -215,7 +215,14 @@ void execute(lua_State *L) {
   case BC_DIVVV:  assert(0 && "NYI BYTECODE: DIVVV");
   case BC_MODVV:  assert(0 && "NYI BYTECODE: MODVV");
   case BC_POW:    assert(0 && "NYI BYTECODE: POW");
-  case BC_CAT:    assert(0 && "NYI BYTECODE: CAT");
+  case BC_CAT:
+    TRACE("CAT");
+    {
+      TValue *res = lj_meta_cat(L, BASE + C, C-B);
+      assert(res == NULL && "NYI: CAT metamethod");
+      copyTV(L, BASE+A, BASE+B);
+    }
+    break;
   case BC_KSTR:
     setgcVraw(BASE+A, kgcref(D, GCobj), LJ_TSTR);
     break;
@@ -234,8 +241,27 @@ void execute(lua_State *L) {
   case BC_USETN:  assert(0 && "NYI BYTECODE: USETN");
   case BC_USETP:  assert(0 && "NYI BYTECODE: USETP");
   case BC_UCLO:   assert(0 && "NYI BYTECODE: UCLO");
-  case BC_FNEW:   assert(0 && "NYI BYTECODE: FNEW");
-  case BC_TNEW:   assert(0 && "NYI BYTECODE: TNEW");
+  case BC_FNEW:
+    TRACE("FNEW");
+    {
+      GCproto *pt = kgcref(D, const GCproto);
+      GCfuncL *parent = &(funcV(BASE-2)->l);
+      TValue *new = lj_func_newL_gc(L, pt, parent);
+      copyTV(L, BASE+D, new);
+    }
+    break;
+  case BC_TNEW:
+    TRACE("TNEW");
+    if (G(L)->gc.total > G(L)->gc.threshold) {
+      lj_gc_step_fixtop(L);
+    }
+    {
+      uint32_t asize = D & ((1<<11)-1);
+      uint32_t hbits = D >> 11;
+      GCtab *tab = lj_tab_new(L, asize, hbits);
+      setgcVraw(BASE+A, tab, LJ_TTAB);
+    }
+    break;
   case BC_TDUP:   assert(0 && "NYI BYTECODE: TDUP");
   case BC_GGET:
     TRACE("GGET");
@@ -279,7 +305,29 @@ void execute(lua_State *L) {
   case BC_TSETM:  assert(0 && "NYI BYTECODE: TSETM");
   case BC_TSETR:  assert(0 && "NYI BYTECODE: TSETR");
   case BC_CALLM:  assert(0 && "NYI BYTECODE: CALLM");
-  case BC_CALL:   assert(0 && "NYI BYTECODE: CALL");
+  case BC_CALL:
+    /* CALL: A = newbase, B = nresults+1, C = nargs+1 */
+    TRACE("CALL");
+    {
+      TValue *f;
+      /* Setup new base for callee frame. */
+      BASE += 2 + A;
+      f = BASE-2;
+      assert(tvisfunc(f) && "NYI: CALL to non-function");
+      /* Notes:
+       *
+       * PC is 32-bit aligned and so the low bits are always 00 which
+       * corresponds to the FRAME_LUA tag value.
+       *
+       * CALL does not have to record the number of expected results
+       * in the frame data. The callee's RET bytecode will locate this
+       * CALL and read the value from the B operand. */
+      BASE[-1].u64 = (intptr_t)PC;
+      PC = mref(funcV(f)->l.pc, BCIns);
+      NARGS = C-1;
+      break;
+    }
+    break;
   case BC_CALLMT: assert(0 && "NYI BYTECODE: CALLMT");
   case BC_CALLT:  assert(0 && "NYI BYTECODE: CALLT");
   case BC_ITERC:  assert(0 && "NYI BYTECODE: ITERC");
