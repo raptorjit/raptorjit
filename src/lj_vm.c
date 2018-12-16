@@ -413,6 +413,23 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       return 1;
     }
     break;
+  case FRAME_LUA:
+    PC = (BCIns*)link;
+    {
+      assert(nresults>0 && "NYI: Multiple value call return");
+      TValue *src = BASE + resultofs;
+      TValue *dst = BASE - 2;
+      /* Find details in caller's CALL instruction operands. */
+      int delta = bc_a(*(PC-1));
+      int nexpected = bc_b(*(PC-1));
+      int ncopy = min(nresults, nexpected);
+      int npad = max(nexpected - nresults, 0);
+      while (ncopy-- > 0) copyTV(L, dst++, src++);
+      while (npad--  > 0) setnilV(dst++);
+      BASE -= 2 + delta;
+      return 0;
+    }
+    break;
   }
   assert(0 && "NYI: Unsupported case in vm_return");
   return 0;
