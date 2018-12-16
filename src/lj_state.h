@@ -17,7 +17,8 @@
 
 static LJ_AINLINE void lj_state_checkstack(lua_State *L, MSize need)
 {
-  assert(mref(L->maxstack, char) - (char *)L->top <=
+  /* XXX This should throw an error rather than abort() */
+  assert(mref(L->maxstack, char) - (char *)L->top >=
 	 (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue));
 }
 
