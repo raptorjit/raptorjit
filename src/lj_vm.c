@@ -433,7 +433,15 @@ void execute(lua_State *L) {
   case BC_ILOOP:  assert(0 && "NYI BYTECODE: ILOOP");
   case BC_JLOOP:  assert(0 && "NYI BYTECODE: JLOOP");
   case BC_JMP:    assert(0 && "NYI BYTECODE: JMP");
-  case BC_FUNCF:  assert(0 && "NYI BYTECODE: FUNCF");
+  case BC_FUNCF:
+    TRACE("FUNCF");
+    {
+      GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+      KBASE = mref(pt->k, void);
+      /* Fill missing args with nil. */
+      if (A > NARGS) copyTVs(L, BASE+NARGS, NULL, A-NARGS, 0);
+    }
+    break;
   case BC_IFUNCF: assert(0 && "NYI BYTECODE: IFUNCF");
   case BC_JFUNCF: assert(0 && "NYI BYTECODE: JFUNCF");
   case BC_FUNCV:
