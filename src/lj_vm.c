@@ -518,9 +518,12 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       /* Find details in caller's CALL instruction operands. */
       int delta = bc_a(*(PC-1));
       int nexpected = bc_b(*(PC-1));
+      GCproto *pt;
       copyTVs(L, BASE-2, BASE+resultofs, nexpected, nresults);
       BASE -= 2 + delta;
-      TOP = BASE + funcproto(funcV(BASE-2))->framesize;
+      pt = funcproto(funcV(BASE-2));
+      TOP = BASE + pt->framesize;
+      KBASE = mref(pt->k, void);
       return 0;
     }
     break;
