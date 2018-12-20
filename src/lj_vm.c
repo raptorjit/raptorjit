@@ -19,7 +19,8 @@
 #include "lj_meta.h"
 #include "lj_func.h"
 
-#define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%d\n", name, A, B, C, D)
+#define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%d\n", \
+                           name, A, B, C, D, TOP-BASE)
 
 #define neg(n) (-1 - (n))
 #define max(a,b) ((a)>(b) ? (a) : (b))
@@ -41,6 +42,15 @@ static void printstack(lua_State *L)
 }
 #endif
 
+/*
+ * Random notes:
+ *
+ * This interpreter keeps the value of L->top consistent between
+ * bytecodes. This is helpful for debugging. The assembler VM only
+ * updates L->top when calling external code that might use it.
+ */
+
+
 /* -- Virtual machine registers ------------------------------------------- */
 
 /* The "registers" in the virtual machine are simply some important
@@ -136,14 +146,35 @@ static const BCIns *pc;
  *
  * Note: Changing PC does not automatically update these registers.
  */
-#define OP bc_op(i)
-#define A  bc_a(i)
-#define B  bc_b(i)
-#define C  bc_c(i)
-#define D  bc_d(i)
+#define OP bc_op(curins)
+#define A  bc_a(curins)
+#define B  bc_b(curins)
+#define C  bc_c(curins)
+#define D  bc_d(curins)
 
 
 /* -- Utility functions --------------------------------------------------- */
+
+/* Copy values from 'src' to 'dst' and fill missing values with nil.
+ * Return pointer to element after the last one filled in dst.
+ */
+static TValue *copyTVs(lua_State *L, TValue *dst, TValue *src,
+                       int need, int have)
+{
+  int ncopy = min(need, have);
+  int npad  = max(0, need - have);
+  lua_assert(need>=0);
+  lua_assert(have>=0);
+  while (ncopy-- > 0) copyTV(L, dst++, src++);
+  while (npad--  > 0) setnilV(dst++);
+  return dst;
+}
+
+/* Return the nth constant TValue. */
+static inline TValue* ktv(int n)
+{
+  return (TValue*)KBASE + n;
+}
 
 /* Return the nth constant GC object. */
 static inline const GCobj* kgc(int n)
@@ -162,7 +193,7 @@ static inline void branchPC(int offset)
 
 /* Execute virtual machine instructions in a tail-recursive loop. */
 void execute(lua_State *L) {
-  BCIns i = *PC++;
+  BCIns curins = *PC++;
   switch (OP) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
@@ -184,7 +215,7 @@ void execute(lua_State *L) {
     {
       int flag = tvistruecond(BASE+D);
       /* Advance to jump instruction. */
-      i = *PC++;
+      curins = *PC++;
       if (flag) branchPC(D);
     }
     break;
@@ -244,7 +275,7 @@ void execute(lua_State *L) {
   case BC_FNEW:
     TRACE("FNEW");
     {
-      GCproto *pt = kgcref(D, const GCproto);
+      GCproto *pt = kgcref(D, GCproto);
       GCfuncL *parent = &(funcV(BASE-2)->l);
       TValue *new = lj_func_newL_gc(L, pt, parent);
       copyTV(L, BASE+D, new);
@@ -302,7 +333,20 @@ void execute(lua_State *L) {
   case BC_TSETV:  assert(0 && "NYI BYTECODE: TSETV");
   case BC_TSETS:  assert(0 && "NYI BYTECODE: TSETS");
   case BC_TSETB:  assert(0 && "NYI BYTECODE: TSETB");
-  case BC_TSETM:  assert(0 && "NYI BYTECODE: TSETM");
+  case BC_TSETM:
+    TRACE("TSETM");
+    {
+      int i = 0, ix = ktv(D)->u32.lo;
+      TValue *o = BASE+A-1;
+      GCtab *tab = tabV(o);
+      if (isblack((GCobj*)tab))
+        lj_gc_barrierback(G(L), tab);
+      if (tab->asize < ix+NARGS)
+        lj_tab_reasize(L, tab, ix + NARGS);
+      for (i = 0; i < NARGS; i++)
+        copyTV(L, BASE+A+i, BASE+D+i);
+    }
+    break;
   case BC_TSETR:  assert(0 && "NYI BYTECODE: TSETR");
   case BC_CALLM:  assert(0 && "NYI BYTECODE: CALLM");
   case BC_CALL:
@@ -332,7 +376,14 @@ void execute(lua_State *L) {
   case BC_CALLT:  assert(0 && "NYI BYTECODE: CALLT");
   case BC_ITERC:  assert(0 && "NYI BYTECODE: ITERC");
   case BC_ITERN:  assert(0 && "NYI BYTECODE: ITERN");
-  case BC_VARG:   assert(0 && "NYI BYTECODE: VARG");
+  case BC_VARG:
+    TRACE("VARG");
+    {
+      int delta = BASE[-1].u64 >> 3;
+      MULTRES = delta;
+      copyTVs(L, BASE+A, BASE-2-delta+C, B>0 ? B : MULTRES, MULTRES);
+    }
+    break;
   case BC_ISNEXT: assert(0 && "NYI BYTECODE: ISNEXT");
   case BC_RETM:   assert(0 && "NYI BYTECODE: RETM");
   case BC_RET:    assert(0 && "NYI BYTECODE: RET");
@@ -388,12 +439,17 @@ void execute(lua_State *L) {
   case BC_FUNCV:
     TRACE("FUNCV");
     {
-      TValue *newbase = BASE + 2 + NARGS;
       GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+      /* Save base of frame containing all parameters. */
+      TValue *oldbase = BASE;
+      /* Base for new frame containing only fixed parameters. */
+      BASE += 2 + NARGS;
+      copyTV(L, BASE-2, oldbase-2);
+      BASE[-1].u64 = FRAME_VARG + (NARGS << 3);
+      copyTVs(L, BASE, oldbase, pt->numparams, NARGS);
+      TOP = BASE + pt->framesize;
+      /* Set constant pool address. */
       KBASE = mref(pt->k, void);
-      newbase[-1].u64 = FRAME_VARG + ((nargs+1) << 3);
-      while (nargs < pt->numparams)
-        setnilV(L->base+(nargs++)-1);
     }      
     break;
   case BC_IFUNCV: assert(0 && "NYI BYTECODE: IFUNCV");
@@ -442,22 +498,16 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
     /* Returning from the VM to C code. */
     {
       CFrame *cf = (CFrame*)L->cframe;
-      TValue *src = BASE + resultofs;
-      TValue *dst = BASE - (link>>3);
+      int delta = link>>3;
+      TValue *dst = BASE - delta;
       /* Push TRUE for successful return from a pcall.  */
       if (link & FRAME_P) setboolV(dst++, 1);
-      /* How many of our return values does the caller want? */
-      int ncopy = min(nresults, cf->nresults);
-      /* How many further values is the caller expecting? */
-      int npad  = max(cf->nresults - nresults, 0);
       assert(cf->nresults>=0);
       STATE = ~LJ_VMST_C;
       /* Copy results into caller frame */
-      while (ncopy-- > 0) copyTV(L, dst++, src++);
-      while (npad--  > 0) setnilV(dst++);
-      /* Set BASE..TOP to the returned values. */
+      dst = copyTVs(L, dst, BASE+resultofs, cf->nresults, nresults);
       TOP = dst + 1;
-      BASE -= (intptr_t)link>>3;
+      BASE -= delta;
       return 1;
     }
     break;
@@ -465,16 +515,12 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
     PC = (BCIns*)link;
     {
       assert(nresults>0 && "NYI: Multiple value call return");
-      TValue *src = BASE + resultofs;
-      TValue *dst = BASE - 2;
       /* Find details in caller's CALL instruction operands. */
       int delta = bc_a(*(PC-1));
       int nexpected = bc_b(*(PC-1));
-      int ncopy = min(nresults, nexpected);
-      int npad = max(nexpected - nresults, 0);
-      while (ncopy-- > 0) copyTV(L, dst++, src++);
-      while (npad--  > 0) setnilV(dst++);
+      copyTVs(L, BASE-2, BASE+resultofs, nexpected, nresults);
       BASE -= 2 + delta;
+      TOP = BASE + funcproto(funcV(BASE-2))->framesize;
       return 0;
     }
     break;
