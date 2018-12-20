@@ -277,8 +277,8 @@ void execute(lua_State *L) {
     {
       GCproto *pt = kgcref(D, GCproto);
       GCfuncL *parent = &(funcV(BASE-2)->l);
-      TValue *new = lj_func_newL_gc(L, pt, parent);
-      copyTV(L, BASE+D, new);
+      GCfunc *fn = lj_func_newL_gc(L, pt, parent);
+      setgcVraw(BASE+A, fn, LJ_TFUNC);
     }
     break;
   case BC_TNEW:
