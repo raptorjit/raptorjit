@@ -390,7 +390,7 @@ $(DWARF_DWO): %.dwo: %.c
 lj_dwarf_dwo.o lj_dwarf_dwo_dyn.o: $(DWARF_DWO)
 	$(E) "EMBED     $@"
 	$(Q)$(LD) -r -b binary -o $@ $<
-	$(Q)$(LD) -shared -b binary -o $(@:.o=_dyn.o) $<
+	$(Q)$(LD) -b binary -o $(@:.o=_dyn.o) $<
 
 include Makefile.dep
 
