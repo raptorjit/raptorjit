@@ -1,4 +1,4 @@
-# Package information for LuaJIT to be used by pkg-config.
+# Package information for RaptorJIT be used by pkg-config.
 majver=1
 minver=0
 relver=0
