@@ -130,7 +130,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
   o = gcref(g->strhash[h & g->strmask]);
   while (o != NULL) {
     GCstr *sx = gco2str(o);
-    if (sx->len == len && memcmp(str, strdata(sx), len) == 0) {
+    if (sx->hash == h && sx->len == len && memcmp(str, strdata(sx), len) == 0) {
       /* Resurrect if dead. Can only happen with fixstring() (keywords). */
       if (isdead(g, o)) flipwhite(o);
       return sx;  /* Return existing string. */
