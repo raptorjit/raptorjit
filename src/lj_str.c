@@ -23,9 +23,7 @@ int32_t lj_str_cmp(GCstr *a, GCstr *b)
     uint32_t va = *(const uint32_t *)(strdata(a)+i);
     uint32_t vb = *(const uint32_t *)(strdata(b)+i);
     if (va != vb) {
-#if LJ_LE
       va = lj_bswap(va); vb = lj_bswap(vb);
-#endif
       i -= n;
       if ((int32_t)i >= -3) {
 	va >>= 32+(i<<3); vb >>= 32+(i<<3);
