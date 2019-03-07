@@ -1,6 +1,5 @@
 // Config file for the 'unifdef' program to strip out unwanted source code.
 
-#define LJ_GC64 1
 #define LJ_HASFFI 1
 #define LJ_HASJIT 1
 #define LJ_NO_UNWIND 1

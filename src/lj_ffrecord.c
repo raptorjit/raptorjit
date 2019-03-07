@@ -191,8 +191,6 @@ static void recff_type(jit_State *J, RecordFFData *rd)
   uint32_t t;
   if (tvisnumber(&rd->argv[0]))
     t = ~LJ_TNUMX;
-  else if (LJ_64 && !LJ_GC64 && tvislightud(&rd->argv[0]))
-    t = ~LJ_TLIGHTUD;
   else
     t = ~itype(&rd->argv[0]);
   J->base[0] = lj_ir_kstr(J, strV(&J->fn->c.upvalue[t]));

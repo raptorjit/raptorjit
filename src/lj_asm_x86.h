@@ -56,13 +56,13 @@ static void asm_guardcc(ASMState *as, int cc)
     target = p;
     cc ^= 1;
     if (as->realign) {
-      if (LJ_GC64 && LJ_UNLIKELY(as->mrm.base == RID_RIP))
+      if (LJ_UNLIKELY(as->mrm.base == RID_RIP))
 	as->mrm.ofs += 2;  /* Fixup RIP offset for pending fused load. */
       emit_sjcc(as, cc, target);
       return;
     }
   }
-  if (LJ_GC64 && LJ_UNLIKELY(as->mrm.base == RID_RIP))
+  if (LJ_UNLIKELY(as->mrm.base == RID_RIP))
     as->mrm.ofs += 6;  /* Fixup RIP offset for pending fused load. */
   emit_jcc(as, cc, target);
 }
@@ -240,26 +240,16 @@ static void asm_fusestrref(ASMState *as, IRIns *ir, RegSet allow)
   as->mrm.base = as->mrm.idx = RID_NONE;
   as->mrm.scale = XM_SCALE1;
   as->mrm.ofs = sizeof(GCstr);
-  if (!LJ_GC64 && irref_isk(ir->op1)) {
-    as->mrm.ofs += IR(ir->op1)->i;
-  } else {
-    Reg r = ra_alloc1(as, ir->op1, allow);
-    rset_clear(allow, r);
-    as->mrm.base = (uint8_t)r;
-  }
+  Reg r = ra_alloc1(as, ir->op1, allow);
+  rset_clear(allow, r);
+  as->mrm.base = (uint8_t)r;
   irr = IR(ir->op2);
   if (irref_isk(ir->op2)) {
     as->mrm.ofs += irr->i;
   } else {
     Reg r;
     /* Fuse a constant add into the offset, e.g. string.sub(s, i+10). */
-    if (!LJ_64 &&  /* Has bad effects with negative index on x64. */
-	mayfuse(as, ir->op2) && irr->o == IR_ADD && irref_isk(irr->op2)) {
-      as->mrm.ofs += IR(irr->op2)->i;
-      r = ra_alloc1(as, irr->op1, allow);
-    } else {
-      r = ra_alloc1(as, ir->op2, allow);
-    }
+    r = ra_alloc1(as, ir->op2, allow);
     if (as->mrm.base == RID_NONE)
       as->mrm.base = (uint8_t)r;
     else
@@ -325,7 +315,7 @@ static void asm_fusexref(ASMState *as, IRRef ref, RegSet allow)
 static Reg asm_fuseloadk64(ASMState *as, IRIns *ir)
 {
   const uint64_t *k = &ir_k64(ir)->u64;
-  if (!LJ_GC64 || checki32((intptr_t)k)) {
+  if (checki32((intptr_t)k)) {
     as->mrm.ofs = ptr2addr(k);
     as->mrm.base = RID_NONE;
   } else if (checki32(dispofs(as, k))) {
@@ -397,7 +387,7 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
     if (ir->o == IR_SLOAD) {
       if (!(ir->op2 & (IRSLOAD_PARENT|IRSLOAD_CONVERT)) &&
 	  noconflict(as, ref, IR_RETF, 0) &&
-	  !(LJ_GC64 && irt_isaddr(ir->t))) {
+	  !irt_isaddr(ir->t)) {
 	as->mrm.base = (uint8_t)ra_alloc1(as, REF_BASE, xallow);
 	as->mrm.ofs = 8*((int32_t)ir->op1-1-LJ_FR2) +
 		      (!LJ_FR2 && (ir->op2 & IRSLOAD_FRAME) ? 4 : 0);
@@ -413,7 +403,7 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
       }
     } else if (ir->o == IR_ALOAD || ir->o == IR_HLOAD || ir->o == IR_ULOAD) {
       if (noconflict(as, ref, ir->o + IRDELTA_L2S, 0) &&
-	  !(LJ_GC64 && irt_isaddr(ir->t))) {
+	  !irt_isaddr(ir->t)) {
 	asm_fuseahuref(as, ir->op1, xallow);
 	return RID_MRM;
       }
@@ -426,7 +416,7 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
 	asm_fusexref(as, ir->op1, xallow);
 	return RID_MRM;
       }
-    } else if (ir->o == IR_VLOAD && !(LJ_GC64 && irt_isaddr(ir->t))) {
+    } else if (ir->o == IR_VLOAD && !irt_isaddr(ir->t)) {
       asm_fuseahuref(as, ir->op1, xallow);
       return RID_MRM;
     }
@@ -496,7 +486,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
     }
     if (r) {  /* Argument is in a register. */
       if (r < RID_MAX_GPR && ref < ASMREF_TMP1) {
-	if (LJ_GC64 ? !(ir->o == IR_KINT || ir->o == IR_KNULL) : ir->o == IR_KINT64)
+	if (!(ir->o == IR_KINT || ir->o == IR_KNULL))
 	  emit_loadu64(as, r, ir_k64(ir)->u64);
 	else
 	  emit_loadi(as, r, ir->i);
@@ -872,8 +862,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
   if (!isk) {
     rset_clear(allow, tab);
     key = ra_alloc1(as, ir->op2, irt_isnum(kt) ? RSET_FPR : allow);
-    if (LJ_GC64 || !irt_isstr(kt))
-      tmp = ra_scratch(as, rset_exclude(allow, key));
+    tmp = ra_scratch(as, rset_exclude(allow, key));
   }
 
   /* Key not found in chain: jump to exit (if merged) or load niltv. */
@@ -1321,7 +1310,7 @@ static void asm_sload(ASMState *as, IRIns *ir)
   if ((ir->op2 & IRSLOAD_TYPECHECK)) {
     /* Need type check, even if the load result is unused. */
     asm_guardcc(as, irt_isnum(t) ? CC_AE : CC_NE);
-    if (LJ_64 && irt_type(t) >= IRT_NUM) {
+    if (irt_type(t) >= IRT_NUM) {
       lua_assert(irt_isinteger(t) || irt_isnum(t));
       emit_u32(as, LJ_TISNUM << 15);
       emit_rmro(as, XO_ARITHi, XOg_CMP, base, ofs+4);
@@ -2467,8 +2456,8 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
     *(int32_t *)(p+len-4) = jmprel(p+len, target);
   /* Do not patch parent exit for a stack check. Skip beyond vmstate update. */
   for (; p < pe; p += asm_x86_inslen(p)) {
-    intptr_t ofs = LJ_GC64 ? (p[0] & 0xf0) == 0x40 : LJ_64;
-    if (*(uint32_t *)(p+2+ofs) == statei && p[ofs+LJ_GC64-LJ_64] == XI_MOVmi)
+    intptr_t ofs = (p[0] & 0xf0) == 0x40;
+    if (*(uint32_t *)(p+2+ofs) == statei && p[ofs] == XI_MOVmi)
       break;
   }
   lua_assert(p < pe);

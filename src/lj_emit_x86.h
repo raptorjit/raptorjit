@@ -88,7 +88,7 @@ static void emit_rmro(ASMState *as, x86Op xo, Reg rr, Reg rb, int32_t ofs)
   MCode *p = as->mcp;
   x86Mode mode;
   if (ra_hasreg(rb)) {
-    if (LJ_GC64 && rb == RID_RIP) {
+    if (rb == RID_RIP) {
       mode = XM_OFS0;
       p -= 4;
       *(int32_t *)p = ofs;
@@ -183,7 +183,7 @@ static void emit_mrm(ASMState *as, x86Op xo, Reg rr, Reg rb)
 	goto mrmidx;
       *--p = MODRM(XM_SCALE1, RID_ESP, RID_EBP);
       rb = RID_ESP;
-    } else if (LJ_GC64 && rb == RID_RIP) {
+    } else if (rb == RID_RIP) {
       lua_assert(as->mrm.idx == RID_NONE);
       mode = XM_OFS0;
       p -= 4;

@@ -1769,7 +1769,7 @@ static void asm_tail_link(ASMState *as)
   emit_addptr(as, RID_BASE, 8*(int32_t)baseslot);
 
   if (as->J->ktrace) {  /* Patch ktrace slot with the final GCtrace pointer. */
-    setgcref(IR(as->J->ktrace)[LJ_GC64].gcr, obj2gco(as->J->curfinal));
+    setgcref(IR(as->J->ktrace)[1].gcr, obj2gco(as->J->curfinal));
     IR(as->J->ktrace)->o = IR_KGC;
   }
 

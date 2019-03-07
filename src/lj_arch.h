@@ -91,9 +91,6 @@
 #endif
 #endif
 
-/* 64 bit GC references. */
-#define LJ_GC64			1
-
 /* 2-slot frame info. */
 #define LJ_FR2			1
 
