@@ -122,8 +122,6 @@
 #define LJ_ENDIAN_LOHI(lo, hi)		lo hi
 #endif
 
-#define LJ_32			0
-
 #ifndef LJ_TARGET_UNALIGNED
 #define LJ_TARGET_UNALIGNED	0
 #endif

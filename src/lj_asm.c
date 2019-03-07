@@ -761,8 +761,6 @@ static void asm_snap_alloc1(ASMState *as, IRRef ref)
       ir->r = RID_SUNK;
       if (ir->o == IR_CNEWI) {  /* Allocate CNEWI value. */
 	asm_snap_alloc1(as, ir->op2);
-	if (LJ_32 && (ir+1)->o == IR_HIOP)
-	  asm_snap_alloc1(as, (ir+1)->op2);
       } else
       {  /* Allocate stored values for TNEW, TDUP and CNEW. */
 	IRIns *irs;
@@ -772,8 +770,6 @@ static void asm_snap_alloc1(ASMState *as, IRRef ref)
 	    lua_assert(irs->o == IR_ASTORE || irs->o == IR_HSTORE ||
 		       irs->o == IR_FSTORE || irs->o == IR_XSTORE);
 	    asm_snap_alloc1(as, irs->op2);
-	    if (LJ_32 && (irs+1)->o == IR_HIOP)
-	      asm_snap_alloc1(as, (irs+1)->op2);
 	  }
       }
     } else {
@@ -2059,7 +2055,6 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     for (as->curins--; as->curins > as->stopins; as->curins--) {
       IRIns *ir = IR(as->curins);
       MCode *end = as->mcp;
-      lua_assert(!(LJ_32 && irt_isint64(ir->t)));  /* Handled by SPLIT. */
       if (!ra_used(ir) && !ir_sideeff(ir) && (as->flags & JIT_F_OPT_DCE))
 	continue;  /* Dead-code elimination can be soooo easy. */
       if (irt_isguard(ir->t))

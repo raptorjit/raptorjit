@@ -214,8 +214,6 @@ static void callback_conv_args(CTState *cts, lua_State *L)
       CALLBACK_HANDLE_REGARG  /* Handle register arguments. */
 
       /* Otherwise pass argument on stack. */
-      if (CCALL_ALIGN_STACKARG && LJ_32 && sz == 8)
-	nsp = (nsp + 1) & ~1u;  /* Align 64 bit argument on stack. */
       sp = &stack[nsp];
       nsp += n;
 

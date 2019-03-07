@@ -93,10 +93,7 @@ static void sink_mark_ins(jit_State *J)
       break;
       }
     case IR_CNEWI:
-      if (irt_isphi(ir->t) &&
-	  (!sink_checkphi(J, ir, ir->op2) ||
-	   (LJ_32 && ir+1 < irlast && (ir+1)->o == IR_HIOP &&
-	    !sink_checkphi(J, ir, (ir+1)->op2))))
+      if (irt_isphi(ir->t) && !sink_checkphi(J, ir, ir->op2))
 	irt_setmark(ir->t);  /* Mark ineligible allocation. */
       /* fallthrough */
     case IR_USTORE:

@@ -494,23 +494,13 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
       }
     } else if (irt_isfp(ir->t)) {  /* FP argument is on stack. */
       lua_assert(!(irt_isfloat(ir->t) && irref_isk(ref)));  /* No float k. */
-      if (LJ_32 && (ofs & 4) && irref_isk(ref)) {
-	/* Split stores for unaligned FP consts. */
-	emit_movmroi(as, RID_ESP, ofs, (int32_t)ir_knum(ir)->u32.lo);
-	emit_movmroi(as, RID_ESP, ofs+4, (int32_t)ir_knum(ir)->u32.hi);
-      } else {
-	r = ra_alloc1(as, ref, RSET_FPR);
-	emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSDto : XO_MOVSSto,
-		  r, RID_ESP, ofs);
-      }
-      ofs += (LJ_32 && irt_isfloat(ir->t)) ? 4 : 8;
+      r = ra_alloc1(as, ref, RSET_FPR);
+      emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSDto : XO_MOVSSto,
+                r, RID_ESP, ofs);
+      ofs += 8;
     } else {  /* Non-FP argument is on stack. */
-      if (LJ_32 && ref < ASMREF_TMP1) {
-	emit_movmroi(as, RID_ESP, ofs, ir->i);
-      } else {
-	r = ra_alloc1(as, ref, RSET_GPR);
-	emit_movtomro(as, REX_64 + r, RID_ESP, ofs);
-      }
+      r = ra_alloc1(as, ref, RSET_GPR);
+      emit_movtomro(as, REX_64 + r, RID_ESP, ofs);
       ofs += sizeof(intptr_t);
     }
     checkmclim(as);
@@ -522,13 +512,10 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
 {
   RegSet drop = RSET_SCRATCH;
-  int hiop = (LJ_32 && (ir+1)->o == IR_HIOP && !irt_isnil((ir+1)->t));
   if ((ci->flags & CCI_NOFPRCLOBBER))
     drop &= ~RSET_FPR;
   if (ra_hasreg(ir->r))
     rset_clear(drop, ir->r);  /* Dest reg handled below. */
-  if (hiop && ra_hasreg((ir+1)->r))
-    rset_clear(drop, (ir+1)->r);  /* Dest reg handled below. */
   ra_evictset(as, drop);  /* Evictions must be performed first. */
   if (ra_used(ir)) {
     if (irt_isfp(ir->t)) {
@@ -548,8 +535,6 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
       lua_assert(!irt_ispri(ir->t));
       ra_destreg(as, ir, RID_RET);
     }
-  } else if (LJ_32 && irt_isfp(ir->t) && !(ci->flags & CCI_CASTU64)) {
-    emit_x87op(as, XI_FPOP);  /* Pop unused result from x87 st0. */
   }
 }
 
@@ -586,10 +571,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
     /* Use a (hoistable) non-scratch register for indirect calls. */
     RegSet allow = (RSET_GPR & ~RSET_SCRATCH);
     Reg r = ra_alloc1(as, func, allow);
-    if (LJ_32) emit_spsub(as, spadj);  /* Above code may cause restores! */
     emit_rr(as, XO_GROUP5, XOg_CALL, r);
-  } else if (LJ_32) {
-    emit_spsub(as, spadj);
   }
   asm_gencall(as, &ci, args);
 }
@@ -648,24 +630,12 @@ static void asm_conv(ASMState *as, IRIns *ir)
   int stfp = (st == IRT_NUM || st == IRT_FLOAT);
   IRRef lref = ir->op1;
   lua_assert(irt_type(ir->t) != st);
-  lua_assert(!(LJ_32 && (irt_isint64(ir->t) || st64)));  /* Handled by SPLIT. */
   if (irt_isfp(ir->t)) {
     Reg dest = ra_dest(as, ir, RSET_FPR);
     if (stfp) {  /* FP to FP conversion. */
       Reg left = asm_fuseload(as, lref, RSET_FPR);
       emit_mrm(as, st == IRT_NUM ? XO_CVTSD2SS : XO_CVTSS2SD, dest, left);
       if (left == dest) return;  /* Avoid the XO_XORPS. */
-    } else if (LJ_32 && st == IRT_U32) {  /* U32 to FP conversion on x86. */
-      /* number = (2^52+2^51 .. u32) - (2^52+2^51) */
-      cTValue *k = &as->J->k64[LJ_K64_TOBIT];
-      Reg bias = ra_scratch(as, rset_exclude(RSET_FPR, dest));
-      if (irt_isfloat(ir->t))
-	emit_rr(as, XO_CVTSD2SS, dest, dest);
-      emit_rr(as, XO_SUBSD, dest, bias);  /* Subtract 2^52+2^51 bias. */
-      emit_rr(as, XO_XORPS, dest, bias);  /* Merge bias and integer. */
-      emit_rma(as, XO_MOVSD, bias, k);
-      emit_mrm(as, XO_MOVD, dest, asm_fuseload(as, lref, RSET_GPR));
-      return;
     } else {  /* Integer to FP conversion. */
       Reg left = (st == IRT_U32 || st == IRT_U64) ?
 		 ra_alloc1(as, lref, RSET_GPR) :
@@ -694,8 +664,6 @@ static void asm_conv(ASMState *as, IRIns *ir)
 	Reg tmp = ra_noreg(IR(lref)->r) ? ra_alloc1(as, lref, RSET_FPR) :
 					  ra_scratch(as, RSET_FPR);
 	MCLabel l_end = emit_label(as);
-	if (LJ_32)
-	  emit_gri(as, XG_ARITHi(XOg_ADD), dest, (int32_t)0x80000000);
 	emit_rr(as, op, dest|REX_64, tmp);
 	if (st == IRT_NUM)
 	  emit_rma(as, XO_ADDSD, tmp, &as->J->k64[LJ_K64_M2P64_31]);
@@ -731,10 +699,7 @@ static void asm_conv(ASMState *as, IRIns *ir)
     /* Add extra MOV if source is already in wrong register. */
     emit_mrm(as, op, dest, left);
   } else {  /* 32/64 bit integer conversions. */
-    if (LJ_32) {  /* Only need to handle 32/32 bit no-op (cast) on x86. */
-      Reg dest = ra_dest(as, ir, RSET_GPR);
-      ra_left(as, dest, lref);  /* Do nothing, but may need to move regs. */
-    } else if (irt_is64(ir->t)) {
+    if (irt_is64(ir->t)) {
       Reg dest = ra_dest(as, ir, RSET_GPR);
       if (st64 || !(ir->op2 & IRCONV_SEXT)) {
 	/* 64/64 bit no-op (cast) or 32 to 64 bit zero extension. */
@@ -1089,7 +1054,6 @@ static void asm_fxstore(ASMState *as, IRIns *ir)
     asm_fusefref(as, IR(ir->op1), allow);
   } else {
     asm_fusexref(as, ir->op1, allow);
-    if (LJ_32 && ir->o == IR_HIOP) as->mrm.ofs += 4;
   }
   if (ra_hasreg(src)) {
     x86Op xo;
@@ -2378,10 +2342,6 @@ static uint32_t asm_x86_inslen(const uint8_t* p)
       else if ((prefixes & 2) && (x == 0x66)) x = 4;
       goto mrm;
     case 7: /* VEX c4/c5. */
-      if (LJ_32 && p[1] < 0xc0) {
-	x = 2;
-	goto mrm;
-      }
       if (x == 0x70) {
 	x = *++p & 0x1f;
 	result++;

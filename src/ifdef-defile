@@ -54,7 +54,6 @@
 #define LUAJIT_TARGET_POSIX 1
 #define __linux__
 #undef JL_TARGET_PPC
-#undef LJ_32
 #undef LJ_ABI_EABI
 #undef LJ_ABI_SOFTFP
 #undef LJ_ABI_WIN

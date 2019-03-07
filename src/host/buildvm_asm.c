@@ -74,14 +74,7 @@ err:
   if (strncmp(sym+(*sym == '_'), LABEL_PREFIX, sizeof(LABEL_PREFIX)-1)) {
     /* Various fixups for external symbols outside of our binary. */
     if (ctx->mode == BUILD_elfasm) {
-      if (LJ_32)
-	fprintf(ctx->fp, "#if __PIC__\n\t%s lj_wrap_%s\n#else\n", opname, sym);
       fprintf(ctx->fp, "\t%s %s@PLT\n", opname, sym);
-      if (LJ_32)
-	fprintf(ctx->fp, "#endif\n");
-      return;
-    } else if (LJ_32 && ctx->mode == BUILD_machasm) {
-      fprintf(ctx->fp, "\t%s L%s$stub\n", opname, sym);
       return;
     }
   }
