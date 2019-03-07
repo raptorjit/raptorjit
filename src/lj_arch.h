@@ -108,11 +108,9 @@
 #define LJ_SOFTFP		(!LJ_ARCH_HASFPU)
 
 #if LJ_ARCH_ENDIAN == LUAJIT_BE
-#define LJ_LE			0
 #define LJ_ENDIAN_SELECT(le, be)	be
 #define LJ_ENDIAN_LOHI(lo, hi)		hi lo
 #else
-#define LJ_LE			1
 #define LJ_ENDIAN_SELECT(le, be)	le
 #define LJ_ENDIAN_LOHI(lo, hi)		lo hi
 #endif
