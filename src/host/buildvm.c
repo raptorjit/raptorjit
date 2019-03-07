@@ -98,20 +98,11 @@ static const char *sym_decorate(BuildCtx *ctx,
 {
   char name[256];
   char *p;
-#if LJ_64
   const char *symprefix = ctx->mode == BUILD_machasm ? "_" : "";
-#elif LJ_TARGET_XBOX360
-  const char *symprefix = "";
-#else
-  const char *symprefix = ctx->mode != BUILD_elfasm ? "_" : "";
-#endif
   sprintf(name, "%s%s%s", symprefix, prefix, suffix);
   p = strchr(name, '@');
   if (p) {
 #if LJ_TARGET_X86ORX64
-    if (!LJ_64 && (ctx->mode == BUILD_coffasm || ctx->mode == BUILD_peobj))
-      name[0] = name[1] == 'R' ? '_' : '@';  /* Just for _RtlUnwind@16. */
-    else
       *p = '\0';
 #elif LJ_TARGET_PPC && !LJ_TARGET_CONSOLE
     /* Keep @plt etc. */
@@ -434,7 +425,7 @@ int main(int argc, char **argv)
   BuildCtx *ctx = &ctx_;
   int status, binmode;
 
-  if (sizeof(void *) != 4*LJ_32+8*LJ_64) {
+  if (sizeof(void *) != 8) {
     fprintf(stderr,"Error: pointer size mismatch in cross-build.\n");
     fprintf(stderr,"Try: make HOST_CC=\"gcc -m32\" CROSS=...\n\n");
     return 1;

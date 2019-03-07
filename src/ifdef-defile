@@ -14,7 +14,6 @@
 #undef LUAJIT_NOFFI
 #undef LUAJIT_USE_GDBJIT
 
-#define LJ_64 1
 #define LJ_ARCH_BITS 64
 #define LJ_ARCH_ENDIAN == LUAJIT_LE
 #define LJ_DUALNUM 0

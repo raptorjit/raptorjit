@@ -647,7 +647,7 @@ static void snap_restoredata(GCtrace *T, ExitState *ex,
 	src = (int32_t *)&ex->fpr[r-RID_MIN_FPR];
 	if (LJ_BE && sz == 4) src++;
       } else
-      if (LJ_64 && LJ_BE && sz == 4) src++;
+      if (LJ_BE && sz == 4) src++;
     }
   }
   lua_assert(sz == 1 || sz == 2 || sz == 4 || sz == 8);
@@ -693,7 +693,7 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 	  else if (irt_isi8(irs->t) || irt_isu8(irs->t)) szs = 1;
 	  else if (irt_isi16(irs->t) || irt_isu16(irs->t)) szs = 2;
 	  else szs = 4;
-	  if (LJ_64 && iro->o == IR_KINT64)
+	  if (iro->o == IR_KINT64)
 	    p += (int64_t)ir_k64(iro)->u64;
 	  else
 	    p += iro->i;

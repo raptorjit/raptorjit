@@ -71,7 +71,7 @@ static void emit_rr(ASMState *as, x86Op xo, Reg r1, Reg r2)
   as->mcp = emit_opm(xo, XM_REG, r1, r2, p, 0);
 }
 
-#if LJ_64 && defined(LUA_USE_ASSERT)
+#if defined(LUA_USE_ASSERT)
 /* [addr] is sign-extended in x64 and must be in lower 2G (not 4G). */
 static int32_t ptr2addr(const void *p)
 {

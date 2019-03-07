@@ -1905,9 +1905,6 @@ static void asm_setup_regsp(ASMState *as)
 	  continue;
 	}
 	break;
-      } else if (ir->op2 == IRFPM_EXP2 && !LJ_64) {
-	if (as->evenspill < 4)  /* Leave room to call pow(). */
-	  as->evenspill = 4;
       }
       if (inloop)
 	as->modset |= RSET_SCRATCH;

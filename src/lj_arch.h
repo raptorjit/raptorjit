@@ -123,7 +123,6 @@
 #endif
 
 #define LJ_32			0
-#define LJ_64			1
 
 #ifndef LJ_TARGET_UNALIGNED
 #define LJ_TARGET_UNALIGNED	0
