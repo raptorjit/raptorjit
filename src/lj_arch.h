@@ -101,9 +101,6 @@
 #define LJ_HASJIT		1
 #endif
 
-/* Disable or enable the FFI extension. */
-#define LJ_HASFFI		1
-
 #ifndef LJ_ARCH_HASFPU
 #define LJ_ARCH_HASFPU		1
 #endif

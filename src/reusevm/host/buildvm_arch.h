@@ -3939,7 +3939,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     //|  cmp RBd, RDd
     dasm_put(Dst, 10128);
 #line 2516 "vm_x64.dasc"
-    if (!LJ_HASFFI) goto iseqne_test;
     if (vk) {
       //|  jne >3
       //|  movzx RDd, PC_RD

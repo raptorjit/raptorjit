@@ -275,7 +275,7 @@ void emit_asm(BuildCtx *ctx)
   for (i = rel = 0; i < ctx->nsym; i++) {
     int32_t ofs = ctx->sym[i].ofs;
     int32_t next = ctx->sym[i+1].ofs;
-#if LJ_TARGET_ARM && defined(__GNUC__) && !LJ_NO_UNWIND && LJ_HASFFI
+#if LJ_TARGET_ARM && defined(__GNUC__) && !LJ_NO_UNWIND
     if (!strcmp(ctx->sym[i].name, "lj_vm_ffi_call"))
       fprintf(ctx->fp,
 	      ".globl lj_err_unwind_arm\n"
@@ -313,10 +313,6 @@ void emit_asm(BuildCtx *ctx)
 
 #if LJ_TARGET_ARM && defined(__GNUC__) && !LJ_NO_UNWIND
   fprintf(ctx->fp,
-#if !LJ_HASFFI
-	  ".globl lj_err_unwind_arm\n"
-	  ".personality lj_err_unwind_arm\n"
-#endif
 	  ".fnend\n");
 #endif
 

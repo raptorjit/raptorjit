@@ -944,7 +944,7 @@ static void asm_gcstep(ASMState *as, IRIns *ir)
   IRIns *ira;
   for (ira = IR(as->stopins+1); ira < ir; ira++)
     if ((ira->o == IR_TNEW || ira->o == IR_TDUP ||
-	 (LJ_HASFFI && (ira->o == IR_CNEW || ira->o == IR_CNEWI))) &&
+	 (ira->o == IR_CNEW || ira->o == IR_CNEWI)) &&
 	ra_used(ira))
       as->gcsteps++;
   if (as->gcsteps)

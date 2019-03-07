@@ -2513,7 +2513,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sar RB, 47
     |  add PC, 4
     |  cmp RBd, RDd
-    if (!LJ_HASFFI) goto iseqne_test;
     if (vk) {
       |  jne >3
       |  movzx RDd, PC_RD

@@ -22,10 +22,8 @@
 #include "lj_ircall.h"
 #include "lj_frame.h"
 #include "lj_dispatch.h"
-#if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_ccall.h"
-#endif
 #include "luajit.h"
 
 #if defined(_WIN32)
@@ -205,7 +203,7 @@ static int build_code(BuildCtx *ctx)
     if ((LJ_HASJIT ||
 	 !(i == BC_JFORI || i == BC_JFORL || i == BC_JITERL || i == BC_JLOOP ||
 	   i == BC_IFORL || i == BC_IITERL || i == BC_ILOOP)) &&
-	(LJ_HASFFI || i != BC_KCDATA))
+	i != BC_KCDATA)
       sym_insert(ctx, ofs, LABEL_PREFIX_BC, bc_names[i]);
   }
 

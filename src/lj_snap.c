@@ -458,7 +458,7 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 		   ir->o == IR_CNEW || ir->o == IR_CNEWI);
 	if (ir->op1 >= T->nk) snap_pref(J, T, map, nent, seen, ir->op1);
 	if (ir->op2 >= T->nk) snap_pref(J, T, map, nent, seen, ir->op2);
-        if (!LJ_HASFFI || ir->o != IR_CNEWI) {
+        if (ir->o != IR_CNEWI) {
 	  IRIns *irs;
 	  for (irs = ir+1; irs < irlast; irs++)
 	    if (irs->r == RID_SINK && snap_sunk_store(T, ir, irs)) {
@@ -489,7 +489,7 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 	if (op1 >= T->nk) op1 = snap_pref(J, T, map, nent, seen, op1);
 	op2 = ir->op2;
 	if (op2 >= T->nk) op2 = snap_pref(J, T, map, nent, seen, op2);
-	if (LJ_HASFFI && ir->o == IR_CNEWI) {
+	if (ir->o == IR_CNEWI) {
 	  J->slot[snap_slot(sn)] = emitir(ir->ot & ~(IRT_MARK|IRT_ISPHI), op1, op2);
 	} else {
 	  IRIns *irs;
@@ -536,7 +536,7 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 		continue;
 	      }
 	      tmp = emitir(irs->ot, tmp, val);
-	    } else if (LJ_HASFFI && irs->o == IR_XBAR && ir->o == IR_CNEW) {
+	    } else if (irs->o == IR_XBAR && ir->o == IR_CNEW) {
 	      emitir(IRT(IR_XBAR, IRT_NIL), 0, 0);
 	    }
 	}
