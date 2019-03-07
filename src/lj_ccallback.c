@@ -218,9 +218,6 @@ static void callback_conv_args(CTState *cts, lua_State *L)
       nsp += n;
 
     done:
-      if (LJ_BE && cta->size < CTSIZE_PTR
-	 )
-	sp = (void *)((uint8_t *)sp + CTSIZE_PTR-cta->size);
       gcsteps += lj_cconv_tv_ct(cts, cta, 0, o++, sp);
     }
     fid = ctf->sib;

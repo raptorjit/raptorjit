@@ -637,9 +637,7 @@ static void snap_restoredata(GCtrace *T, ExitState *ex,
       src = (int32_t *)&ex->gpr[r-RID_MIN_GPR];
       if (r >= RID_MAX_GPR) {
 	src = (int32_t *)&ex->fpr[r-RID_MIN_FPR];
-	if (LJ_BE && sz == 4) src++;
-      } else
-      if (LJ_BE && sz == 4) src++;
+      }
     }
   }
   lua_assert(sz == 1 || sz == 2 || sz == 4 || sz == 8);
@@ -771,7 +769,7 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
       snap_restoreval(J, T, ex, snapno, rfilt, ref, o);
     }
   }
-  L->base += (map[nent+LJ_BE] & 0xff);
+  L->base += (map[nent] & 0xff);
   lua_assert(map + nent == flinks);
 
   /* Compute current stack top. */
