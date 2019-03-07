@@ -560,7 +560,6 @@ static void asm_callx(ASMState *as, IRIns *ir)
   CCallInfo ci;
   IRRef func;
   IRIns *irf;
-  int32_t spadj = 0;
   ci.flags = asm_callx_flags(as, ir);
   asm_collectargs(as, ir, &ci, args);
   asm_setupresult(as, ir, &ci);

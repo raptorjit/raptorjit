@@ -2487,7 +2487,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add PC, 4
     |  checkstr RB, >3
     |  cmp RB, [KBASE+RD*8]
-  iseqne_test:
     if (vk) {
       |  jne >2
     } else {
