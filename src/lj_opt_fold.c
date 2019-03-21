@@ -1356,6 +1356,19 @@ LJFOLDF(simplify_intmod_k)
   return NEXTFOLD;
 }
 
+LJFOLD(MOD any KINT64)
+LJFOLDF(simplify_intmod_k64)
+{
+  uint64_t k = ir_kint64(fright)->u64;
+  lua_assert(k != 0);
+  if (k > 0 && (k & (k-1)) == 0) {  /* i % (2^k) ==> i & (2^k-1) */
+    fins->o = IR_BAND;
+    fins->op2 = (IRRef1)lj_ir_kint64(J, (int64_t)k-1);
+    return RETRYFOLD;
+  }
+  return NEXTFOLD;
+}
+
 LJFOLD(MOD KINT any)
 LJFOLDF(simplify_intmod_kleft)
 {
