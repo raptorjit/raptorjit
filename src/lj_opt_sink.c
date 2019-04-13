@@ -125,14 +125,19 @@ static void sink_mark_ins(jit_State *J)
 }
 
 /* Mark all instructions referenced by a snapshot. */
-static void sink_mark_snap(jit_State *J, SnapShot *snap)
+static void sink_mark_last_snap(jit_State *J)
 {
+  SnapShot*snap = &J->cur.snap[J->cur.nsnap-1];
   SnapEntry *map = &J->cur.snapmap[snap->mapofs];
   MSize n, nent = snap->nent;
   for (n = 0; n < nent; n++) {
     IRRef ref = snap_ref(map[n]);
-    if (!irref_isk(ref))
-      irt_setmark(IR(ref)->t);
+    IRIns *ir = IR(ref);
+    if (!irref_isk(ref) &&
+        /* Sunk CNEWI is allowed to escape into a linked root trace. */
+        (!(ir->o == IR_CNEWI && (J->cur.linktype == LJ_TRLINK_ROOT ||
+                                 J->cur.linktype == LJ_TRLINK_LOOP))))
+      irt_setmark(ir->t);
   }
 }
 
@@ -228,7 +233,7 @@ void lj_opt_sink(jit_State *J)
       (J->chain[IR_TNEW] || J->chain[IR_TDUP] ||
        (J->chain[IR_CNEW] || J->chain[IR_CNEWI]))) {
     if (!J->loopref)
-      sink_mark_snap(J, &J->cur.snap[J->cur.nsnap-1]);
+      sink_mark_last_snap(J);
     sink_mark_ins(J);
     if (J->loopref)
       sink_remark_phi(J);

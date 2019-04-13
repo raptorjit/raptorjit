@@ -2051,7 +2051,7 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
       emit_rmro(as, XO_MOVSDto, src, RID_BASE, ofs);
     } else {
       lua_assert(irt_ispri(ir->t) || irt_isaddr(ir->t));
-      if (!irref_isk(ref)) {
+      if (!irref_isk(ref) && ir->r != RID_SINK) {
 	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, RID_BASE));
 	if (irt_is64(ir->t)) {
 	  /* TODO: 64 bit store + 32 bit load-modify-store is suboptimal. */
