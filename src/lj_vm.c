@@ -640,6 +640,7 @@ void lj_vm_callhook(void) { assert(0 && "NYI"); }
 /* Trace exit handling. */
 void lj_vm_exit_handler(void) { assert(0 && "NYI"); }
 void lj_vm_exit_interp(void)  { assert(0 && "NYI"); }
+void lj_vm_exit_interp_notrack(void) { assert(0 && "NYI"); }
 
 /* Internal math helper functions. */
 double lj_vm_floor(double a)             { assert(0 && "NYI"); }

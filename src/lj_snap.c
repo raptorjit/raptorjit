@@ -29,31 +29,6 @@
 /* Emit raw IR without passing through optimizations. */
 #define emitir_raw(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_ir_emit(J))
 
-/* -- Snapshot buffer allocation ------------------------------------------ */
-
-/* Grow snapshot buffer. */
-void lj_snap_grow_buf_(jit_State *J, MSize need)
-{
-  MSize maxsnap = (MSize)J->param[JIT_P_maxsnap];
-  if (need > maxsnap)
-    lj_trace_err(J, LJ_TRERR_SNAPOV);
-  lj_mem_growvec(J->L, J->snapbuf, J->sizesnap, maxsnap, SnapShot);
-  J->cur.snap = J->snapbuf;
-}
-
-/* Grow snapshot map buffer. */
-void lj_snap_grow_map_(jit_State *J, MSize need)
-{
-  if (need < 2*J->sizesnapmap)
-    need = 2*J->sizesnapmap;
-  else if (need < 64)
-    need = 64;
-  J->snapmapbuf = (SnapEntry *)lj_mem_realloc(J->L, J->snapmapbuf,
-		    J->sizesnapmap*sizeof(SnapEntry), need*sizeof(SnapEntry));
-  J->cur.snapmap = J->snapmapbuf;
-  J->sizesnapmap = need;
-}
-
 /* -- Snapshot generation ------------------------------------------------- */
 
 /* Add all modified slots to the snapshot. */
@@ -130,7 +105,6 @@ static void snapshot_stack(jit_State *J, SnapShot *snap, MSize nsnapmap)
   MSize nent;
   SnapEntry *p;
   /* Conservative estimate. */
-  lj_snap_grow_map(J, nsnapmap + nslots + (MSize)(LJ_FR2?2:J->framedepth+1));
   p = &J->cur.snapmap[nsnapmap];
   nent = snapshot_slots(J, p, nslots);
   snap->nent = (uint8_t)nent;
@@ -157,7 +131,6 @@ void lj_snap_add(jit_State *J)
     nsnapmap = J->cur.snap[--nsnap].mapofs;
   } else {
   nomerge:
-    lj_snap_grow_buf(J, nsnap+1);
     J->cur.nsnap = (uint16_t)(nsnap+1);
   }
   J->mergesnap = 0;
@@ -485,16 +458,13 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 		   ir->o == IR_CNEW || ir->o == IR_CNEWI);
 	if (ir->op1 >= T->nk) snap_pref(J, T, map, nent, seen, ir->op1);
 	if (ir->op2 >= T->nk) snap_pref(J, T, map, nent, seen, ir->op2);
-	if (LJ_HASFFI && ir->o == IR_CNEWI) {
-	  if (LJ_32 && refp+1 < T->nins && (ir+1)->o == IR_HIOP)
-	    snap_pref(J, T, map, nent, seen, (ir+1)->op2);
-	} else {
+        if (ir->o != IR_CNEWI) {
 	  IRIns *irs;
 	  for (irs = ir+1; irs < irlast; irs++)
 	    if (irs->r == RID_SINK && snap_sunk_store(T, ir, irs)) {
 	      if (snap_pref(J, T, map, nent, seen, irs->op2) == 0)
 		snap_pref(J, T, map, nent, seen, T->ir[irs->op2].op1);
-	      else if ((LJ_SOFTFP || (LJ_32 && LJ_HASFFI)) &&
+	      else if (LJ_SOFTFP &&
 		       irs+1 < irlast && (irs+1)->o == IR_HIOP)
 		snap_pref(J, T, map, nent, seen, (irs+1)->op2);
 	    }
@@ -519,12 +489,7 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 	if (op1 >= T->nk) op1 = snap_pref(J, T, map, nent, seen, op1);
 	op2 = ir->op2;
 	if (op2 >= T->nk) op2 = snap_pref(J, T, map, nent, seen, op2);
-	if (LJ_HASFFI && ir->o == IR_CNEWI) {
-	  if (LJ_32 && refp+1 < T->nins && (ir+1)->o == IR_HIOP) {
-	    lj_needsplit(J);  /* Emit joining HIOP. */
-	    op2 = emitir_raw(IRT(IR_HIOP, IRT_I64), op2,
-			     snap_pref(J, T, map, nent, seen, (ir+1)->op2));
-	  }
+	if (ir->o == IR_CNEWI) {
 	  J->slot[snap_slot(sn)] = emitir(ir->ot & ~(IRT_MARK|IRT_ISPHI), op1, op2);
 	} else {
 	  IRIns *irs;
@@ -553,7 +518,7 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 		lua_assert(irc->o == IR_CONV && irc->op2 == IRCONV_NUM_INT);
 		val = snap_pref(J, T, map, nent, seen, irc->op1);
 		val = emitir(IRTN(IR_CONV), val, IRCONV_NUM_INT);
-	      } else if ((LJ_SOFTFP || (LJ_32 && LJ_HASFFI)) &&
+	      } else if (LJ_SOFTFP &&
 			 irs+1 < irlast && (irs+1)->o == IR_HIOP) {
 		IRType t = IRT_I64;
 		if (LJ_SOFTFP && irt_type((irs+1)->t) == IRT_SOFTFP)
@@ -571,7 +536,7 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 		continue;
 	      }
 	      tmp = emitir(irs->ot, tmp, val);
-	    } else if (LJ_HASFFI && irs->o == IR_XBAR && ir->o == IR_CNEW) {
+	    } else if (irs->o == IR_XBAR && ir->o == IR_CNEW) {
 	      emitir(IRT(IR_XBAR, IRT_NIL), 0, 0);
 	    }
 	}
@@ -643,7 +608,7 @@ static void snap_restoredata(GCtrace *T, ExitState *ex,
   int32_t *src;
   uint64_t tmp;
   if (irref_isk(ref)) {
-    if (ir->o == IR_KNUM || ir->o == IR_KINT64) {
+    if (ir_isk64(ir)) {
       src = (int32_t *)&ir[1];
     } else if (sz == 8) {
       tmp = (uint64_t)(uint32_t)ir->i;
@@ -672,9 +637,7 @@ static void snap_restoredata(GCtrace *T, ExitState *ex,
       src = (int32_t *)&ex->gpr[r-RID_MIN_GPR];
       if (r >= RID_MAX_GPR) {
 	src = (int32_t *)&ex->fpr[r-RID_MIN_FPR];
-	if (LJ_BE && sz == 4) src++;
-      } else
-      if (LJ_64 && LJ_BE && sz == 4) src++;
+      }
     }
   }
   lua_assert(sz == 1 || sz == 2 || sz == 4 || sz == 8);
@@ -701,11 +664,6 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
     if (ir->o == IR_CNEWI) {
       uint8_t *p = (uint8_t *)cdataptr(cd);
       lua_assert(sz == 4 || sz == 8);
-      if (LJ_32 && sz == 8 && ir+1 < T->ir + T->nins && (ir+1)->o == IR_HIOP) {
-	snap_restoredata(T, ex, snapno, rfilt, (ir+1)->op2, LJ_LE?p+4:p, 4);
-	if (LJ_BE) p += 4;
-	sz = 4;
-      }
       snap_restoredata(T, ex, snapno, rfilt, ir->op2, p, sz);
     } else {
       IRIns *irs, *irlast = &T->ir[T->snap[snapno].ref];
@@ -720,17 +678,12 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 	  else if (irt_isi8(irs->t) || irt_isu8(irs->t)) szs = 1;
 	  else if (irt_isi16(irs->t) || irt_isu16(irs->t)) szs = 2;
 	  else szs = 4;
-	  if (LJ_64 && iro->o == IR_KINT64)
+	  if (iro->o == IR_KINT64)
 	    p += (int64_t)ir_k64(iro)->u64;
 	  else
 	    p += iro->i;
 	  lua_assert(p >= (uint8_t *)cdataptr(cd) &&
 		     p + szs <= (uint8_t *)cdataptr(cd) + sz);
-	  if (LJ_32 && irs+1 < T->ir + T->nins && (irs+1)->o == IR_HIOP) {
-	    lua_assert(szs == 4);
-	    snap_restoredata(T, ex, snapno, rfilt, (irs+1)->op2, LJ_LE?p+4:p,4);
-	    if (LJ_BE) p += 4;
-	  }
 	  snap_restoredata(T, ex, snapno, rfilt, irs->op2, p, szs);
 	}
     }
@@ -816,7 +769,7 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
       snap_restoreval(J, T, ex, snapno, rfilt, ref, o);
     }
   }
-  L->base += (map[nent+LJ_BE] & 0xff);
+  L->base += (map[nent] & 0xff);
   lua_assert(map + nent == flinks);
 
   /* Compute current stack top. */

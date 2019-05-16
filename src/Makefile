@@ -1,5 +1,5 @@
 ##############################################################################
-# LuaJIT Makefile. Requires GNU Make.
+# RaptorJIT Makefile. Requires GNU Make.
 #
 # Please read doc/install.html before changing any variables!
 #
@@ -72,9 +72,6 @@ XCFLAGS=
 #XCFLAGS+= -DLUAJIT_NUMMODE=1
 #XCFLAGS+= -DLUAJIT_NUMMODE=2
 #
-# Enable GC64 mode for x64.
-#XCFLAGS+= -DLUAJIT_ENABLE_GC64
-#
 ##############################################################################
 
 ##############################################################################
@@ -83,14 +80,6 @@ XCFLAGS=
 # Enable these options as needed, but make sure you force a full recompile
 # with "make clean", followed by "make".
 # Note that most of these are NOT suitable for benchmarking or release mode!
-#
-# Use the system provided memory allocator (realloc) instead of the
-# bundled memory allocator. This is slower, but sometimes helpful for
-# debugging. This option cannot be enabled on x64 without GC64, since
-# realloc usually doesn't return addresses in the right address range.
-# OTOH this option is mandatory for Valgrind's memcheck tool on x64 and
-# the only way to get useful results from it for all other architectures.
-#XCFLAGS+= -DLUAJIT_USE_SYSMALLOC
 #
 # This define is required to run LuaJIT under Valgrind. The Valgrind
 # header files must be installed. You should enable debug information, too.
@@ -162,7 +151,7 @@ TARGET_DYNXLDOPTS=
 
 TARGET_LFSFLAGS= -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
 TARGET_XCFLAGS= $(TARGET_LFSFLAGS) -U_FORTIFY_SOURCE
-TARGET_XLDFLAGS=
+TARGET_XLDFLAGS= -Wl,-E
 TARGET_XLIBS= -lm
 TARGET_TCFLAGS= $(CCOPTIONS) $(TARGET_XCFLAGS) $(TARGET_FLAGS) $(TARGET_CFLAGS)
 TARGET_ACFLAGS= $(CCOPTIONS) $(TARGET_XCFLAGS) $(TARGET_FLAGS) $(TARGET_CFLAGS)
@@ -197,7 +186,7 @@ endif
 
 TARGET_XCFLAGS+= -fno-stack-protector
 TARGET_XLIBS+= -ldl
-HOST_XCFLAGS+= -DLUAJIT_OS=LUAJIT_OS_LINUX
+Host_XCFLAGS+= -DLUAJIT_OS=LUAJIT_OS_LINUX
 
 ##############################################################################
 # Files and pathnames.
@@ -220,11 +209,13 @@ LJCORE_O= lj_gc.o lj_err.o lj_char.o lj_bc.o lj_obj.o lj_buf.o \
 	  lj_ir.o lj_opt_mem.o lj_opt_fold.o lj_opt_narrow.o \
 	  lj_opt_dce.o lj_opt_loop.o lj_opt_split.o lj_opt_sink.o \
 	  lj_mcode.o lj_snap.o lj_record.o lj_crecord.o lj_ffrecord.o \
-	  lj_asm.o lj_trace.o lj_gdbjit.o \
+	  lj_asm.o lj_trace.o lj_gdbjit.o lj_auditlog.o \
 	  lj_ctype.o lj_cdata.o lj_cconv.o lj_ccall.o lj_ccallback.o \
 	  lj_carith.o lj_clib.o lj_cparse.o \
-	  lj_lib.o lj_alloc.o lib_aux.o \
+	  lj_lib.o lib_aux.o lj_dwarf_dwo.o \
 	  $(LJLIB_O) lib_init.o
+
+DWARF_DWO= lj_dwarf.dwo
 
 LJVMCORE_O= $(LJVM_O) $(LJCORE_O)
 LJVMCORE_DYNO= $(LJVMCORE_O:.o=_dyn.o)
@@ -235,7 +226,7 @@ LUAJIT_SO= libraptorjit.so
 LUAJIT_T= raptorjit
 
 ALL_T= $(LUAJIT_T) $(LUAJIT_A) $(LUAJIT_SO) $(HOST_T)
-ALL_HDRGEN= lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h \
+ALL_HDRGEN= lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h
 ALL_GEN= $(ALL_HDRGEN)
 WIN_RM= *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
 ALL_RM= $(ALL_T) *.o host/*.o $(WIN_RM)
@@ -257,7 +248,7 @@ E= @:
 # Make targets.
 ##############################################################################
 
-default all:	$(TARGET_T)
+default all:	$(TARGET_T) $(DWARF_DWO)
 
 clean:
 	$(HOST_RM) $(ALL_RM)
@@ -360,6 +351,18 @@ $(LUAJIT_O):
 $(HOST_O): %.o: %.c
 	$(E) "HOSTCC    $@"
 	$(Q)$(HOST_CC) $(HOST_ACFLAGS) -c -o $@ $<
+
+$(DWARF_DWO): $(ALL_HDRGEN)
+
+$(DWARF_DWO): %.dwo: %.c
+	$(E) "CC(debug) $@"
+	$(Q)$(TARGET_CC) -g3 -fno-eliminate-unused-debug-types -gsplit-dwarf -c $<
+
+# Embed DWARF debug information as binary data available to raptorjit.
+lj_dwarf_dwo.o lj_dwarf_dwo_dyn.o: $(DWARF_DWO)
+	$(E) "EMBED     $@"
+	$(Q)$(LD) -r -b binary -o $@ $<
+	$(Q)$(LD) -b binary -o $(@:.o=_dyn.o) $<
 
 include Makefile.dep
 

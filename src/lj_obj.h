@@ -21,37 +21,36 @@ typedef uint32_t MSize;
 typedef uint64_t GCSize;
 
 /* Memory reference */
-typedef struct MRef {
-  uint64_t ptr64;	/* True 64 bit pointer. */
-} MRef;
+typedef void * MRef;
 
-#define mref(r, t)	((t *)(void *)(r).ptr64)
+#define mref(r, t)	((t *)(r))
 
-#define setmref(r, p)	((r).ptr64 = (uint64_t)(void *)(p))
-#define setmrefr(r, v)	((r).ptr64 = (v).ptr64)
+#define setmref(r, p)	((r) = (void *)(p))
+#define setmrefr(r, v)	((r) = (v))
 
 /* -- GC object references (32 bit address space) ------------------------- */
 
+/* Forward declaration. */
+union GCobj;
+
 /* GCobj reference */
-typedef struct GCRef {
-  uint64_t gcptr64;	/* True 64 bit pointer. */
-} GCRef;
+typedef union GCobj * GCRef;
 
 /* Common GC header for all collectable objects. */
 #define GCHeader	GCRef nextgc; uint8_t marked; uint8_t gct
 /* This occupies 6 bytes, so use the next 2 bytes for non-32 bit fields. */
 
-#define gcref(r)	((GCobj *)(r).gcptr64)
-#define gcrefp(r, t)	((t *)(void *)(r).gcptr64)
-#define gcrefu(r)	((r).gcptr64)
-#define gcrefeq(r1, r2)	((r1).gcptr64 == (r2).gcptr64)
+#define gcref(r)	(r)
+#define gcrefp(r, t)	((t *)(void *)(r))
+#define gcrefu(r)	((uint64_t)(r))
+#define gcrefeq(r1, r2)	((r1)==(r2))
 
-#define setgcref(r, gc)	((r).gcptr64 = (uint64_t)&(gc)->gch)
+#define setgcref(r, gc)	((r) = (GCobj *)&(gc)->gch)
 #define setgcreft(r, gc, it) \
-  (r).gcptr64 = (uint64_t)&(gc)->gch | (((uint64_t)(it)) << 47)
-#define setgcrefp(r, p)	((r).gcptr64 = (uint64_t)(p))
-#define setgcrefnull(r)	((r).gcptr64 = 0)
-#define setgcrefr(r, v)	((r).gcptr64 = (v).gcptr64)
+  (r) = (GCobj *)((uint64_t)&(gc)->gch | ((uint64_t)(it) << 47))
+#define setgcrefp(r, p) ((r) = (GCobj *)p)
+#define setgcrefnull(r)	((r) = NULL)
+#define setgcrefr(r, v)	((r) = (v))
 
 #define gcnext(gc)	(gcref((gc)->gch.nextgc))
 
@@ -170,21 +169,6 @@ typedef const TValue cTValue;
 #define LUA_TCDATA	(LAST_TT+2)
 
 /* Internal object tags.
-**
-** Format for 32 bit GC references (!LJ_GC64):
-**
-** Internal tags overlap the MSW of a number object (must be a double).
-** Interpreted as a double these are special NaNs. The FPU only generates
-** one type of NaN (0xfff8_0000_0000_0000). So MSWs > 0xfff80000 are available
-** for use as internal tags. Small negative numbers are used to shorten the
-** encoding of type comparisons (reg/mem against sign-ext. 8 bit immediate).
-**
-**                  ---MSW---.---LSW---
-** primitive types |  itype  |         |
-** lightuserdata   |  itype  |  void * |  (32 bit platforms)
-** lightuserdata   |ffff|    void *    |  (64 bit platforms, 47 bit pointers)
-** GC objects      |  itype  |  GCRef  |
-** number           -------double------
 **
 ** Format for 64 bit GC references (LJ_GC64):
 **
@@ -315,9 +299,10 @@ typedef struct GCproto {
   GCRef chunkname;	/* Name of the chunk this function was defined in. */
   BCLine firstline;	/* First line of the function definition. */
   BCLine numline;	/* Number of lines for the function definition. */
-  MRef lineinfo;	/* Compressed map from bytecode ins. to source line. */
+  MRef lineinfo;	/* Map from bytecode ins. to source line. */
   MRef uvinfo;		/* Upvalue names. */
   MRef varinfo;		/* Names and compressed extents of local variables. */
+  MRef declname;	/* Declared name of function (null-terminated). */
 } GCproto;
 
 /* Flags for prototype. */
@@ -349,9 +334,10 @@ typedef struct GCproto {
 
 #define proto_chunkname(pt)	(strref((pt)->chunkname))
 #define proto_chunknamestr(pt)	(strdata(proto_chunkname((pt))))
-#define proto_lineinfo(pt)	(mref((pt)->lineinfo, const void))
+#define proto_lineinfo(pt)	(mref((pt)->lineinfo, const uint32_t))
 #define proto_uvinfo(pt)	(mref((pt)->uvinfo, const uint8_t))
 #define proto_varinfo(pt)	(mref((pt)->varinfo, const uint8_t))
+#define proto_declname(pt)	(mref((pt)->declname, const char))
 
 /* -- Upvalue object ------------------------------------------------------ */
 
@@ -442,6 +428,7 @@ typedef struct GCtab {
 
 /* VM states. */
 enum {
+  /* VM states. */
   LJ_VMST_INTERP,	/* Interpreter. */
   LJ_VMST_C,		/* C function. */
   LJ_VMST_GC,		/* Garbage collector. */
@@ -449,6 +436,14 @@ enum {
   LJ_VMST_RECORD,	/* Trace recorder. */
   LJ_VMST_OPT,		/* Optimizer. */
   LJ_VMST_ASM,		/* Assembler. */
+  /* JIT trace states.
+  ** These are "abstract" states that logically exist but are never
+  ** directly used for the value of global_State.vmstate.
+  */
+  LJ_VMST_HEAD,		/* Trace mcode before loop */
+  LJ_VMST_LOOP,		/* Trace mcode inside loop */
+  LJ_VMST_JGC,		/* GC invoked from JIT mcode. */
+  LJ_VMST_FFI,		/* Other code outside trace mcode */
   LJ_VMST__MAX
 };
 
@@ -522,6 +517,7 @@ typedef struct global_State {
   GCState gc;		/* Garbage collector. */
   volatile int32_t vmstate;   /* VM state or current JIT code trace number. */
   volatile int32_t gcvmstate; /* Previous VM state (only when state is GC). */
+  volatile int32_t lasttrace; /* VM state before exit to interpreter. */
   SBuf tmpbuf;		/* Temporary string buffer. */
   GCstr strempty;	/* Empty string. */
   uint8_t stremptyz;	/* Zero terminator of empty string. */

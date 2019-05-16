@@ -24,7 +24,6 @@
 #include "lj_dispatch.h"
 #include "lj_vm.h"
 #include "lj_lex.h"
-#include "lj_alloc.h"
 #include "luajit.h"
 
 /* -- Stack handling ------------------------------------------------------ */
@@ -73,6 +72,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
 static void close_state(lua_State *L)
 {
   global_State *g = G(L);
+  jit_State *J = L2J(L);
   lj_func_closeuv(L, tvref(L->stack));
   lj_gc_freeall(g);
   lua_assert(gcref(g->gc.root) == obj2gco(L));
@@ -82,13 +82,13 @@ static void close_state(lua_State *L)
   lj_mem_freevec(g, g->strhash, g->strmask+1, GCRef);
   lj_buf_free(g, &g->tmpbuf);
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
+  lj_mem_free(g, J->bclog, sizeof(BCRecLog)*J->maxbclog);
+  lj_mem_free(g, J->snapmapbuf, sizeof(SnapEntry)*65536);
+  lj_mem_free(g, J->snapbuf, sizeof(SnapShot)*65536);
+  lj_mem_free(g, J->irbuf, 65536*sizeof(IRIns));
+  lj_mem_free(g, J->trace, TRACE_MAX * sizeof(GCRef *));
   lua_assert(g->gc.total == sizeof(GG_State));
-#ifndef LUAJIT_USE_SYSMALLOC
-  if (g->allocf == lj_alloc_f)
-    lj_alloc_destroy(g->allocd);
-  else
-#endif
-    g->allocf(g->allocd, G2GG(g), sizeof(GG_State), 0);
+  g->allocf(g->allocd, G2GG(g), sizeof(GG_State), 0);
 }
 
 LUA_API lua_State *lua_newstate(lua_Alloc f, void *ud)
@@ -96,6 +96,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc f, void *ud)
   GG_State *GG = (GG_State *)f(ud, NULL, 0, sizeof(GG_State));
   lua_State *L = &GG->L;
   global_State *g = &GG->g;
+  jit_State *J = &GG->J;
   if (GG == NULL || !checkptrGC(GG)) return NULL;
   memset(GG, 0, sizeof(GG_State));
   L->gct = ~LJ_TTHREAD;
@@ -121,6 +122,19 @@ LUA_API lua_State *lua_newstate(lua_Alloc f, void *ud)
   g->gc.total = sizeof(GG_State);
   g->gc.pause = LUAI_GCPAUSE;
   g->gc.stepmul = LUAI_GCMUL;
+  /* Statically allocate generous JIT scratch buffers. */
+  J->sizesnap = sizeof(SnapShot)*65536;
+  J->sizesnapmap = sizeof(SnapEntry)*65536;
+  J->snapbuf = (SnapShot *)lj_mem_new(L, J->sizesnap);
+  J->snapmapbuf = (SnapEntry *)lj_mem_new(L, J->sizesnapmap);
+  J->maxbclog = 65536;
+  J->bclog = (BCRecLog *)lj_mem_new(L, sizeof(BCRecLog)*J->maxbclog);
+  J->nbclog = 0;
+  J->irbuf = (IRIns *)lj_mem_new(L, sizeof(IRIns)*65536);
+  J->trace = (GCRef *)lj_mem_new(L, TRACE_MAX * sizeof(GCRef *));
+  if (!(J->irbuf && J->snapbuf && J->bclog && J->snapmapbuf && J->trace))
+    return NULL;
+  memset(J->trace, 0, TRACE_MAX * sizeof(GCRef *));
   lj_dispatch_init((GG_State *)L);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
   if (lj_vm_cpcall(L, NULL, NULL, cpluaopen) != 0) {

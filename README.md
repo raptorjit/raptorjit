@@ -2,64 +2,98 @@
 
 [![Build Status](https://travis-ci.org/raptorjit/raptorjit.svg?branch=master)](https://travis-ci.org/raptorjit/raptorjit)
 
-**RaptorJIT** is a fork of LuaJIT focused on _predictably high performance_.
+**RaptorJIT** is a Lua implementation suitable for high-performance
+low-level system programming. If you want to use a simple dynamic
+language to write a network stack; a hypervisor; a unikernel; a
+database; etc, then you have come to the right place.
 
-Making performance predictable for application developers brings new requirements:
+RaptorJIT is a fork of [LuaJIT](https://luajit.org/) where we aim to
+provide:
 
-- Minimizing the performance impact of non-deterministic JIT decisions.
-- Providing an accurate mental model of how the JIT works and which programming techniques are effective.
-- Providing diagnostic tools ([Studio](https://hydra.snabb.co/job/lukego/studio-manual/studio-manual-html/latest/download-by-type/file/Manual#view-hot-traces)) consistent with this mental model to make the actual operation transparent.
-- Making profiling completely ubiquitous in development, testing, and production environments.
+- Ubiquitous tracing and profiling to make application
+  performance and compiler behaviour transparent to programmers.
+- Interactive tools for inspecting and cross-referencing
+  trace and profiler data ([Studio](https://github.com/studio/studio/)).
+- Collaborative and distributed development based on the Linux kernel
+  fork-and-merge model.
 
-The development process has to support moving quickly in these directions:
+The most notable technical changes since forking LuaJIT are:
 
-- Quality assurance based on repeatable standard benchmarks executed by CI.
-- Streamlined codebase: x86-64 architecture, 64-bit heap (GC64), "no `#ifdef`."
-- Distributed development ("Linux-style") with many maintainers, forks, and merges.
+- Added `auditlog` and `vmprofile` low-overhead ("always on") binary
+  tracing and profiler logging features. Removed obsoleted tracing
+  based on introspection including `jit.v`, `jit.dump`, and `jit.p`.
+- Reduced code maintenance footprint ~50% by removing `#ifdef`
+  features that are not required for Linux/x86-64 e.g. Windows
+  support, 32-bit heap support, and non-x86 backends. This is a
+  necessary short-term expedient to make the code maintainable while
+  we bootstrap the project.
+- Compiler heuristics tightened to reduce the risk of bytecode
+  blacklisting causing catastrophic performance drops.
+- Started using `git merge` to accept contributions of both code and
+  development history from other forks.
 
-Once these requirements have been thoroughly satisfied then new
-requirements can be introduced. For example, ARM64 and other platforms
-can be supported as the project matures.
+RaptorJIT is used successfully by
+the [Snabb](https://github.com/snabbco/snabb) community to develop
+high-performance production network equipment. Join us!
 
-### Performance
+### RaptorJIT compilation for users
 
-RaptorJIT takes a quantitive approach to performance. The value of an
-optimization must be demonstrated with a reproducible benchmark.
-Optimizations that are not demonstrably beneficial on recent CPU
-generations are removed.
-
-This makes the following classes of pull requests very welcome:
-
-- Adding optimizations that improve a CI benchmark.
-- Adding CI benchmarks that demonstrate the value of optimizations.
-- Removing optimizations without degrading CI benchmark performance.
-
-The CI benchmark suite will evolve over time starting from the [standard LuaJIT benchmarks](https://hydra.snabb.co/job/luajit/branchmarks/benchmarkResults/latest/download/2) (already covers RaptorJIT) and the [Snabb end-to-end benchmark suite](https://hydra.snabb.co/job/snabb-new-tests/benchmarks-murren-large/benchmark-reports.report-full-matrix/latest/download/2) (must be updated to cover RaptorJIT.)
-
-### Compilation for users
-
-Simple build:
+Build using LuaJIT to bootstrap the VM:
 
 ```shell
 $ make  # requires LuaJIT (2.0 or 2.1) to run DynASM
 ```
 
-Alternative if you don't have LuaJIT available and you are building a
-pristine copy from the master branch:
+Build without bootstrapping, when not hacking the VM:
 
 ```shell
 $ make reusevm  # Reuse reference copy of the generated VM code
 $ make          # Does not require LuaJIT now
 ```
 
-### Compilation for VM hackers
+### Inspecting trace and profiler data interactively
+
+To understand how your program executes you first produce diagnostic data (*auditlog* and *vmprofile* files) and then you inspect them interactively with [Studio](https://github.com/studio/studio).
+
+You can produce diagnostic data on the command line:
+
+```shell
+$ raptorjit -a audit.log -p default.vmprofile ...
+```
+
+Or within your Lua code:
+
+```lua
+jit.auditlog("audit.log")
+local vmprofile = require("jit.vmprofile")
+vmprofile.open("default.vmprofile")
+```
+
+Then you can copy the file `audit.log` and `*.vmprofile` into a
+directory `/somepath` and inspect that with the Studio script:
+
+```
+with import <studio>;
+raptorjit.inspect /somepath
+```
+
+Studio will then parse, analyze, cross-reference, etc, the diagnostic
+data and present an interactive user-interface for browsing how the
+program ran.
+
+Here are tutorial videos for Studio:
+
+- [How to load Snabb diagnostic data into Studio](https://www.youtube.com/watch?v=x6e1vFFpq5Q). Covers installing Studio and running a script. (Uses a Snabb-specific mechanism for producing diagnostic data which is implemented in Lua.)
+- [Inspecting RaptorJIT IR code with Studio](https://www.youtube.com/watch?v=MQyxXSPXcwg). Covers profiling and inspecting small Lua scripts. Runs Lua code directly from the Studio UI.
+
+### RaptorJIT compilation for VM hackers
 
 RaptorJIT uses [Nix](http://nixos.org/nix/) to provide a reference
 build environment. You can use Nix to build/test/benchmark RaptorJIT
 with suitable versions of all dependencies provided.
 
 Note: Building with nix will be slow the first time because it
-downloads the exact reference versions of the toolchain (clang, etc)
+downloads the exact reference versions of the toolchain (gcc, etc)
 and all dependencies (glibc, etc). This is all cached for future
 builds.
 
@@ -97,7 +131,7 @@ $ nix-shell    # start sub-shell with pristine build environment in $PATH
 $ make
 ```
 
-... but make sure you have at least `make`, `clang`, and `luajit` in your `$PATH`.
+... but make sure you have at least `make`, `gcc`, and `luajit` in your `$PATH`.
 
 ### Run the benchmarks
 
@@ -139,7 +173,7 @@ These are the authoritative optimization resources for processors
 supported by RaptorJIT. If you are confused by references to CPU
 details in discussions then these are the places to look for answers.
 
-- [Computer Architecture: A Quantitiave Approach](https://www.amazon.com/Computer-Architecture-Fifth-Quantitative-Approach/dp/012383872X) by Hennessy and Patterson.
+- [Computer Architecture: A Quantitative Approach](https://www.amazon.com/Computer-Architecture-Fifth-Quantitative-Approach/dp/012383872X) by Hennessy and Patterson.
 - [Intel Architectures Optimization Reference Manual](http://www.intel.com/content/www/us/en/architecture-and-technology/64-ia-32-architectures-optimization-manual.html).
 - Agner Fog's [software optimization resources](http://www.agner.org/optimize/):
     - [Instruction latency and throughput tables](http://www.agner.org/optimize/instruction_tables.pdf).
@@ -157,7 +191,7 @@ Here are some borrowed words to put this branch into context:
 
 > Optimal code is not optimal to maintain. _[Vyacheslav Egorov](https://www.youtube.com/watch?v=EaLboOUG9VQ)_
 
-> If a programmer is indispensible, get rid of him as quickly as possible. _[Gerald M. Weinberg](https://www.amazon.com/Psychology-Computer-Programming-Silver-Anniversary/dp/0932633420)_
+> If a programmer is indispensable, get rid of him as quickly as possible. _[Gerald M. Weinberg](https://www.amazon.com/Psychology-Computer-Programming-Silver-Anniversary/dp/0932633420)_
 
 > If a system is to serve the creative spirit, it
 > must be entirely comprehensible to a single individual. _[Dan

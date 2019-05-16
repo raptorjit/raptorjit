@@ -210,7 +210,7 @@ static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
 /* Write prototype. */
 static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
 {
-  MSize sizedbg = 0;
+  MSize sizedbg = 0, ofsdeclname = 0;
   char *p;
 
   /* Recursively write children of prototype. */
@@ -238,12 +238,15 @@ static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
   p = lj_strfmt_wuleb128(p, pt->sizekn);
   p = lj_strfmt_wuleb128(p, pt->sizebc-1);
   if (!ctx->strip) {
-    if (proto_lineinfo(pt))
+    if (proto_lineinfo(pt)) {
       sizedbg = pt->sizept - (MSize)((char *)proto_lineinfo(pt) - (char *)pt);
+      ofsdeclname = (MSize)((char*)proto_declname(pt) - (char *)proto_lineinfo(pt));
+    }
     p = lj_strfmt_wuleb128(p, sizedbg);
     if (sizedbg) {
       p = lj_strfmt_wuleb128(p, pt->firstline);
       p = lj_strfmt_wuleb128(p, pt->numline);
+      p = lj_strfmt_wuleb128(p, ofsdeclname);
     }
   }
 
@@ -286,7 +289,6 @@ static void bcwrite_header(BCWriteCtx *ctx)
   *p++ = BCDUMP_HEAD3;
   *p++ = BCDUMP_VERSION;
   *p++ = (ctx->strip ? BCDUMP_F_STRIP : 0) +
-	 LJ_BE*BCDUMP_F_BE +
 	 ((ctx->pt->flags & PROTO_FFI) ? BCDUMP_F_FFI : 0) +
 	 LJ_FR2*BCDUMP_F_FR2;
   if (!ctx->strip) {

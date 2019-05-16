@@ -1168,7 +1168,7 @@ LJFOLDF(simplify_conv_sext)
   if (ref == J->scev.idx) {
     IRRef lo = J->scev.dir ? J->scev.start : J->scev.stop;
     lua_assert(irt_isint(J->scev.t));
-    if (lo && IR(lo)->i + ofs >= 0) {
+    if (lo && IR(lo)->o == IR_KINT && IR(lo)->i + ofs >= 0) {
     ok_reduce:
       /* Eliminate widening. All 32 bit ops do an implicit zero-extension. */
       return LEFTFOLD;
@@ -1641,7 +1641,6 @@ LJFOLD(BAND BOR KINT64)
 LJFOLD(BOR BAND KINT64)
 LJFOLDF(simplify_andor_k64)
 {
-#if LJ_HASFFI
   IRIns *irk = IR(fleft->op2);
   PHIBARRIER(fleft);
   if (irk->o == IR_KINT64) {
@@ -1655,9 +1654,6 @@ LJFOLDF(simplify_andor_k64)
     }
   }
   return NEXTFOLD;
-#else
-  UNUSED(J); lua_assert(0); return FAILFOLD;
-#endif
 }
 
 /* -- Reassociation ------------------------------------------------------- */

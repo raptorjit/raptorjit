@@ -568,7 +568,8 @@ static void rec_loop_interp(jit_State *J, const BCIns *pc, LoopEvent ev)
 /* Handle the case when an already compiled loop op is hit. */
 static void rec_loop_jit(jit_State *J, TraceNo lnk, LoopEvent ev)
 {
-  if (J->parent == 0 && J->exitno == 0) {  /* Root trace hit an inner loop. */
+  /* Root trace hit an inner loop. */
+  if (J->parent == 0 && J->exitno == 0 && !innerloopleft(J, J->startpc)) {
     /* Better let the inner loop spawn a side trace back here. */
     lj_trace_err(J, LJ_TRERR_LINNER);
   } else if (ev != LOOPEV_LEAVE) {  /* Side trace enters a compiled loop. */
@@ -864,7 +865,7 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
     /* The metatables of special userdata objects are treated as immutable. */
     if (udtype != UDTYPE_USERDATA) {
       cTValue *mo;
-      if (LJ_HASFFI && udtype == UDTYPE_FFI_CLIB) {
+      if (udtype == UDTYPE_FFI_CLIB) {
 	/* Specialize to the C library namespace object. */
 	emitir(IRTG(IR_EQ, IRT_PGC), ix->tab, lj_ir_kptr(J, udataV(&ix->tabv)));
       } else {
@@ -894,7 +895,7 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
       return 0;  /* No metamethod. */
     }
     /* The cdata metatable is treated as immutable. */
-    if (LJ_HASFFI && tref_iscdata(ix->tab)) goto immutable_mt;
+    if (tref_iscdata(ix->tab)) goto immutable_mt;
     /* TODO: fix ARM32 asm_fload(), so we can use this for all archs. */
     ix->mt = mix.tab = lj_ir_ggfload(J, IRT_TAB,
       GG_OFS(g.gcroot[GCROOT_BASEMT+itypemap(&ix->tabv)]));
@@ -1864,6 +1865,13 @@ void lj_record_ins(jit_State *J)
   BCOp op;
   TRef ra, rb, rc;
 
+  if (J->nbclog < J->maxbclog) {
+    BCRecLog *log = &J->bclog[J->nbclog++];
+    log->pt = J->pt;
+    log->pos = J->pt ? proto_bcpos(J->pt, J->pc) : -1;
+    log->framedepth = J->framedepth;
+  }
+
   /* Perform post-processing action before recording the next instruction. */
   if (LJ_UNLIKELY(J->postproc != LJ_POST_NONE)) {
     switch (J->postproc) {
@@ -2284,8 +2292,6 @@ void lj_record_ins(jit_State *J)
   case BC_IFORL:
   case BC_IITERL:
   case BC_ILOOP:
-  case BC_IFUNCF:
-  case BC_IFUNCV:
     lj_trace_err(J, LJ_TRERR_BLACKL);
     break;
 
@@ -2297,6 +2303,7 @@ void lj_record_ins(jit_State *J)
   /* -- Function headers -------------------------------------------------- */
 
   case BC_FUNCF:
+  case BC_IFUNCF:
     rec_func_lua(J);
     break;
   case BC_JFUNCF:
@@ -2304,6 +2311,7 @@ void lj_record_ins(jit_State *J)
     break;
 
   case BC_FUNCV:
+  case BC_IFUNCV:
     rec_func_vararg(J);
     rec_func_lua(J);
     break;
@@ -2435,6 +2443,8 @@ void lj_record_setup(jit_State *J)
 
   J->bc_min = NULL;  /* Means no limit. */
   J->bc_extent = ~(MSize)0;
+
+  J->nbclog = 0;
 
   /* Emit instructions for fixed references. Also triggers initial IR alloc. */
   emitir_raw(IRT(IR_BASE, IRT_PGC), J->parent, J->exitno);

@@ -28,6 +28,7 @@
 #include "lj_dispatch.h"
 #include "lj_vm.h"
 #include "lj_lib.h"
+#include "lj_auditlog.h"
 
 #include "luajit.h"
 
@@ -80,6 +81,20 @@ LJLIB_CF(jit_flush)
   return setjitmode(L, LUAJIT_MODE_FLUSH);
 }
 
+LJLIB_CF(jit_auditlog)
+{
+  if (L->base < L->top && tvisstr(L->base)) {
+    /* XXX Support auditlog file size argument. */
+    if (lj_auditlog_open(strdata(lj_lib_checkstr(L, 1)), 0)) {
+      return 0;
+    } else {
+      lj_err_caller(L, LJ_ERR_AUDITLOG);
+    }
+  } else {
+    lj_err_argtype(L, 1, "string filename");
+  }
+}
+
 /* Push a string for every flag bit that is set. */
 static void flagbits_to_strings(lua_State *L, uint32_t flags, uint32_t base,
 				const char *str)
@@ -97,6 +112,12 @@ LJLIB_CF(jit_status)
   flagbits_to_strings(L, J->flags, JIT_F_CPU_FIRST, JIT_F_CPUSTRING);
   flagbits_to_strings(L, J->flags, JIT_F_OPT_FIRST, JIT_F_OPTSTRING);
   return (int)(L->top - L->base);
+}
+
+/* Calling this forces a trace stitch. */
+LJLIB_CF(jit_tracebarrier)
+{
+  return 0;
 }
 
 LJLIB_PUSH(top-5) LJLIB_SET(os)
@@ -206,11 +227,14 @@ LJLIB_CF(jit_opt_start)
 
 LJLIB_CF(jit_vmprofile_open)
 {
-  if (L->base < L->top && tvisstr(L->base)) {
-    return luaJIT_vmprofile_open(L, strdata(lj_lib_checkstr(L, 1)));
+  int nargs = (int)(L->top - L->base);
+  int nostart = nargs >= 3 ? boolV(L->base+2) : 0;
+  int noselect = nargs >= 2 ? boolV(L->base+1) : 0;
+  const char *filename = nargs >= 1 ? strdata(lj_lib_checkstr(L, 1)) : NULL;
+  if (filename) {
+    return luaJIT_vmprofile_open(L, filename, noselect, nostart);
   } else {
     lj_err_argtype(L, 1, "filename");
-    return 0;
   }
 }
 
@@ -243,12 +267,6 @@ LJLIB_CF(jit_vmprofile_stop)
 }
 
 #include "lj_libdef.h"
-
-static int luaopen_jit_vmprofile(lua_State *L)
-{
-  LJ_LIB_REG(L, NULL, jit_vmprofile);
-  return 1;
-}
 
 /* -- JIT compiler initialization ----------------------------------------- */
 
@@ -307,8 +325,7 @@ LUALIB_API int luaopen_jit(lua_State *L)
   lua_pushinteger(L, LUAJIT_VERSION_NUM);
   lua_pushliteral(L, LUAJIT_VERSION);
   LJ_LIB_REG(L, LUA_JITLIBNAME, jit);
-  lj_lib_prereg(L, LUA_JITLIBNAME ".vmprofile", luaopen_jit_vmprofile,
-                tabref(L->env));
+  LJ_LIB_REG(L, "jit.vmprofile", jit_vmprofile);
   LJ_LIB_REG(L, "jit.opt", jit_opt);
   L->top -= 2;
   return 1;
