@@ -293,7 +293,16 @@ void execute(lua_State *L) {
       setgcVraw(BASE+A, tab, LJ_TTAB);
     }
     break;
-  case BC_TDUP:   assert(0 && "NYI BYTECODE: TDUP");
+  case BC_TDUP:
+    TRACE("TDUP");
+    if (G(L)->gc.total > G(L)->gc.threshold) {
+      lj_gc_step_fixtop(L);
+    }
+    {
+      GCtab *tab = lj_tab_dup(L, tabV(BASE+D));
+      setgcVraw(BASE+A, tab, LJ_TTAB);
+    }
+    break;
   case BC_GGET:
     TRACE("GGET");
     /* A = _G[D] */
