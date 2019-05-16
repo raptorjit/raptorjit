@@ -266,7 +266,13 @@ void execute(lua_State *L) {
   case BC_KNUM:   assert(0 && "NYI BYTECODE: KNUM");
   case BC_KPRI:   assert(0 && "NYI BYTECODE: KPRI");
   case BC_KNIL:   assert(0 && "NYI BYTECODE: KNIL");
-  case BC_UGET:   assert(0 && "NYI BYTECODE: UGET");
+  case BC_UGET:
+    TRACE("UGET");
+    {
+      GCfuncL *parent = &(funcV(BASE-2)->l);
+      copyTV(L, BASE+A, parent->uvptr[D]->uv.v);
+    }
+    break;
   case BC_USETV:  assert(0 && "NYI BYTECODE: USETV");
   case BC_USETS:  assert(0 && "NYI BYTECODE: USETS");
   case BC_USETN:  assert(0 && "NYI BYTECODE: USETN");
