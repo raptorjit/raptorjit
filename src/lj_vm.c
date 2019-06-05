@@ -363,10 +363,16 @@ void execute(lua_State *L) {
     }
     break;
   case BC_TSETR:  assert(0 && "NYI BYTECODE: TSETR");
-  case BC_CALLM:  assert(0 && "NYI BYTECODE: CALLM");
-  case BC_CALL:
-    /* CALL: A = newbase, B = nresults+1, C = nargs+1 */
-    TRACE("CALL");
+  case BC_CALLM: case BC_CALL:
+    if (OP == BC_CALLM) {
+      /* CALLM: A = newbase, B = nresults+1, C = extra_nargs */
+      TRACE("CALLM");
+      NARGS = C-1+MULTRES; /* nargs in MULTRES */
+    } else if (OP == BC_CALL) {
+      /* CALL: A = newbase, B = nresults+1, C = nargs+1 */
+      TRACE("CALL");
+      NARGS = C-1;
+    }
     {
       TValue *f;
       /* Setup new base for callee frame. */
@@ -383,8 +389,6 @@ void execute(lua_State *L) {
        * CALL and read the value from the B operand. */
       BASE[-1].u64 = (intptr_t)PC;
       PC = mref(funcV(f)->l.pc, BCIns);
-      NARGS = C-1;
-      break;
     }
     break;
   case BC_CALLMT: assert(0 && "NYI BYTECODE: CALLMT");
