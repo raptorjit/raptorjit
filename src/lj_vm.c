@@ -19,7 +19,7 @@
 #include "lj_meta.h"
 #include "lj_func.h"
 
-#define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%d\n", \
+#define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%ld\n", \
                            name, A, B, C, D, TOP-BASE)
 
 #define neg(n) (-1 - (n))
@@ -284,7 +284,7 @@ void execute(lua_State *L) {
       GCproto *pt = kgcref(D, GCproto);
       GCfuncL *parent = &(funcV(BASE-2)->l);
       GCfunc *fn = lj_func_newL_gc(L, pt, parent);
-      setgcVraw(BASE+A, fn, LJ_TFUNC);
+      setgcVraw(BASE+A, (GCobj*)fn, LJ_TFUNC);
     }
     break;
   case BC_TNEW:
@@ -296,7 +296,7 @@ void execute(lua_State *L) {
       uint32_t asize = D & ((1<<11)-1);
       uint32_t hbits = D >> 11;
       GCtab *tab = lj_tab_new(L, asize, hbits);
-      setgcVraw(BASE+A, tab, LJ_TTAB);
+      setgcVraw(BASE+A, (GCobj*)tab, LJ_TTAB);
     }
     break;
   case BC_TDUP:
@@ -306,7 +306,7 @@ void execute(lua_State *L) {
     }
     {
       GCtab *tab = lj_tab_dup(L, tabV(BASE+D));
-      setgcVraw(BASE+A, tab, LJ_TTAB);
+      setgcVraw(BASE+A, (GCobj*)tab, LJ_TTAB);
     }
     break;
   case BC_GGET:
