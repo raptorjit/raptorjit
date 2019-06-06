@@ -255,6 +255,7 @@ void execute(lua_State *L) {
     }
     break;
   case BC_KSTR:
+    TRACE("KSTR");
     setgcVraw(BASE+A, kgcref(D, GCobj), LJ_TSTR);
     break;
   case BC_KCDATA: assert(0 && "NYI BYTECODE: KCDATA");
