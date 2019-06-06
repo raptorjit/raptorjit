@@ -500,6 +500,7 @@ void execute(lua_State *L) {
       if (vm_return(L, BASE[-1].u64, resultofs, nresults)) return;
     }
     break;
+  default: assert(0 && "INVALID BYTECODE");
   }
   /* Tail recursion. */
   execute(L);
