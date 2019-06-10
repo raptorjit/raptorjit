@@ -271,7 +271,7 @@ void execute(lua_State *L) {
     TRACE("UGET");
     {
       GCfuncL *parent = &(funcV(BASE-2)->l);
-      copyTV(L, BASE+A, parent->uvptr[D]->uv.v);
+      BASE[A] = *mref(parent->uvptr[D]->uv.v, TValue);
     }
     break;
   case BC_USETV:  assert(0 && "NYI BYTECODE: USETV");
