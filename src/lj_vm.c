@@ -40,6 +40,15 @@ static void printstack(lua_State *L)
     fflush(stdout);
   }
 }
+static void printupvalues(GCfuncL *parent)
+{
+  int i;
+  for (i = 0; i < parent->nupvalues; i++) {
+    TValue *v = parent->uvptr[i]->uv.v;
+    printf("[%3d] %p 0x%lx %s\n", i, v, v->u64, lj_typename(v));
+    fflush(stdout);
+  }
+}
 #endif
 
 /*
