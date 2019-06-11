@@ -120,8 +120,8 @@ static const BCIns *pc;
  * provided by a multiple-valued instruction. The multiple values are
  * counted separately from (in addition to) any fixed values.
  *
- * MULTRES is set both by multiple value call instructions (e.g.
- * CALLM) and by multiple value return instructions (e.g. RETM).
+ * MULTRES is read by multiple value call instructions (e.g.
+ * CALLM) and set by multiple value return instructions (e.g. RETM, FUNCC).
  */
 /* XXX Rename to e.g. "MULTVAL" since this is used for both results and arguments? */
 #define MULTRES multres
@@ -553,6 +553,7 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
     PC = (BCIns*)link;
     {
       assert(nresults>0 && "NYI: Multiple value call return");
+      MULTRES = nresults;
       /* Find details in caller's CALL instruction operands. */
       int delta = bc_a(*(PC-1));
       int nexpected = bc_b(*(PC-1));
