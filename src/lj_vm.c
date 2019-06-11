@@ -356,7 +356,28 @@ void execute(lua_State *L) {
   case BC_TGETB:  assert(0 && "NYI BYTECODE: TGETB");
   case BC_TGETR:  assert(0 && "NYI BYTECODE: TGETR");
   case BC_TSETV:  assert(0 && "NYI BYTECODE: TSETV");
-  case BC_TSETS:  assert(0 && "NYI BYTECODE: TSETS");
+  case BC_TSETS:
+    TRACE("TSETS");
+    {
+      TValue *o = BASE+B;
+      GCstr *key = kgcref(C, GCstr);
+      if (tvistab(o)) {
+        GCtab *tab = tabV(o);
+        copyTV(L, lj_tab_setstr(L, tab, key), BASE+A);
+        lj_gc_anybarriert(L, tab);
+      } else {
+        TValue tvkey;
+        /* Convert key to tagged value. */
+        setgcVraw(&tvkey, obj2gco(key), LJ_TSTR);
+        // XXX SAVE_L
+        // XXX SAVE_PC
+        TValue *v = lj_meta_tset(L, o, &tvkey);
+        assert(v != NULL && "NYI: lj_meta_tset unreachable");
+        /* NOBARRIER: lj_meta_tset ensures the table is not black. */
+        copyTV(L, v, BASE+A);
+      }
+      break;
+    }
   case BC_TSETB:  assert(0 && "NYI BYTECODE: TSETB");
   case BC_TSETM:
     TRACE("TSETM");
