@@ -377,7 +377,7 @@ void execute(lua_State *L) {
     if (OP == BC_CALLM) {
       /* CALLM: A = newbase, B = nresults+1, C = extra_nargs */
       TRACE("CALLM");
-      NARGS = C-1+MULTRES; /* nargs in MULTRES */
+      NARGS = C+MULTRES; /* nargs in MULTRES */
     } else if (OP == BC_CALL) {
       /* CALL: A = newbase, B = nresults+1, C = nargs+1 */
       TRACE("CALL");
