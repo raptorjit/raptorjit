@@ -349,8 +349,12 @@ void execute(lua_State *L) {
         // XXX SAVE_L
         // XXX SAVE_PC
         res = lj_meta_tget(L, o, &tvkey);
+        assert(res != NULL && "NYI: lj_meta_tget unreachable");
       }
-      copyTV(L, BASE+A, res);
+      if (res)
+        copyTV(L, BASE+A, res);
+      else
+        setnilV(BASE+A);
       break;
     }
   case BC_TGETB:  assert(0 && "NYI BYTECODE: TGETB");
