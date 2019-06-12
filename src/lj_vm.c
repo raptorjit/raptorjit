@@ -596,7 +596,6 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
   case FRAME_LUA:
     PC = (BCIns*)link;
     {
-      assert(nresults>0 && "NYI: Multiple value call return");
       MULTRES = nresults;
       /* Find details in caller's CALL instruction operands. */
       int delta = bc_a(*(PC-1));
