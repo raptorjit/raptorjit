@@ -501,7 +501,10 @@ void execute(lua_State *L) {
   case BC_LOOP:   assert(0 && "NYI BYTECODE: LOOP");
   case BC_ILOOP:  assert(0 && "NYI BYTECODE: ILOOP");
   case BC_JLOOP:  assert(0 && "NYI BYTECODE: JLOOP");
-  case BC_JMP:    assert(0 && "NYI BYTECODE: JMP");
+  case BC_JMP:
+    TRACE("JMP");
+    branchPC(D);
+    break;
   case BC_FUNCF:
     TRACE("FUNCF");
     {
