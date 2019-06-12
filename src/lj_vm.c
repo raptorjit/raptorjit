@@ -228,7 +228,15 @@ void execute(lua_State *L) {
       if (flag) branchPC(D);
     }
     break;
-  case BC_ISF:    assert(0 && "NYI BYTECODE: ISF");
+  case BC_ISF:
+    TRACE("ISF");
+    {
+      int flag = !tvistruecond(BASE+D);
+      /* Advance to jump instruction. */
+      curins = *PC++;
+      if (flag) branchPC(D);
+    }
+    break;
   case BC_ISTYPE: assert(0 && "NYI BYTECODE: ISTYPE");
   case BC_ISNUM:  assert(0 && "NYI BYTECODE: ISNUM");
   case BC_MOV:
