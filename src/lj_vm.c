@@ -282,7 +282,14 @@ void execute(lua_State *L) {
     setnumV(BASE+A, D);
     break;
   case BC_KNUM:   assert(0 && "NYI BYTECODE: KNUM");
-  case BC_KPRI:   assert(0 && "NYI BYTECODE: KPRI");
+  case BC_KPRI:
+    TRACE("KPRI");
+    {
+      assert(D <= 2 && "NYI PRIMITIVE != 0/1/2");
+      if (D) setboolV(BASE+A, D-1);
+      else   setnilV(BASE+A);
+    }
+    break;
   case BC_KNIL:   assert(0 && "NYI BYTECODE: KNIL");
   case BC_UGET:
     TRACE("UGET");
