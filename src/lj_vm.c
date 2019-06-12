@@ -540,6 +540,7 @@ void execute(lua_State *L) {
     {
       int nresults, resultofs;
       lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
+      uint64_t link = BASE[-1].u64; /* Backlink to return address */
       assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
       assert(OP == BC_FUNCC); /* XXX */
       TOP = BASE + NARGS;
@@ -547,7 +548,7 @@ void execute(lua_State *L) {
       nresults = (*f)(L);
       STATE = ~LJ_VMST_INTERP;
       resultofs = TOP - (BASE + nresults);
-      if (vm_return(L, BASE[-1].u64, resultofs, nresults)) return;
+      if (vm_return(L, link, resultofs, nresults)) return;
     }
     break;
   default: assert(0 && "INVALID BYTECODE");
