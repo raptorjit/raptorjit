@@ -555,22 +555,11 @@ void execute(lua_State *L) {
     }
     break;
   default:
-    /*
-      XXX - handle ASM fast functions.
-      FIXME: need symbols for pseudo opcodes.
-    */
-    switch ((uint32_t)OP) {
-    case 0x6a:
-      TRACE("FFUNC:tonumber");
-      {
-        if (NARGS != 1 || !tvisnumber(BASE))
-          fff_fallback(L);
-        else
-          vm_return(L, BASE[-1].u64, 0, 1);
-      }
-      break;
-    default: assert(0 && "INVALID BYTECODE");
-    }
+    /* Handle ASM fast functions. */
+    if (OP >= BC__MAX && OP < BC__MAX+GG_NUM_ASMFF)
+      fff_fallback(L);
+    else
+      assert(0 && "INVALID BYTECODE");
   }
   /* Tail recursion. */
   execute(L);
