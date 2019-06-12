@@ -581,8 +581,6 @@ void execute(lua_State *L) {
 
 /* Return to the previous frame.
  *
- * Requires that PC is loaded with the return address.
- *
  * Ensures that...
  *   BASE is restored to the base frame of the previous stack frame.
  *   Return values are copied to BASE..BASE+NRESULTS+MULTRES.
