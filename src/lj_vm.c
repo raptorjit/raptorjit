@@ -26,8 +26,9 @@
 #define max(a,b) ((a)>(b) ? (a) : (b))
 #define min(a,b) ((a)<(b) ? (a) : (b))
 
-/* Forward declaration. */
+/* Forward declarations. */
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
+void fff_fallback(lua_State *L);
 
 /* Simple debug utility. */
 #if 0
@@ -553,7 +554,23 @@ void execute(lua_State *L) {
       if (vm_return(L, BASE[-1].u64, resultofs, nresults)) return;
     }
     break;
-  default: assert(0 && "INVALID BYTECODE");
+  default:
+    /*
+      XXX - handle ASM fast functions.
+      FIXME: need symbols for pseudo opcodes.
+    */
+    switch ((uint32_t)OP) {
+    case 0x6a:
+      TRACE("FFUNC:tonumber");
+      {
+        if (NARGS != 1 || !tvisnumber(BASE))
+          fff_fallback(L);
+        else
+          vm_return(L, BASE[-1].u64, 0, 1);
+      }
+      break;
+    default: assert(0 && "INVALID BYTECODE");
+    }
   }
   /* Tail recursion. */
   execute(L);
@@ -613,6 +630,34 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
   }
   assert(0 && "NYI: Unsupported case in vm_return");
   return 0;
+}
+
+
+/* -- Fast ASM functions--------------------------------------------------- */
+
+/* Fallback to ASM fast function handler
+ *
+ * Call fallback handler for ASM fast functions (relics from the ASM VM) and
+ * massage VM state to return to caller.
+ *
+ * This can not just use vm_return and needs a special handler because ASK fast
+ * functions are peculiar in multiple ways:
+ *  - they use the stack space BASE-2..BASE+NARGS
+ *  - they can yield to retries and tailcalls (NYI)
+ *
+ */
+void fff_fallback(lua_State *L) {
+  uint64_t link = BASE[-1].u64;
+  TOP = BASE + NARGS;
+  assert(TOP+1+LUA_MINSTACK <= mref(L->maxstack, TValue));
+  lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
+  int res = (*f)(L);
+  switch (res) {
+  case -1: assert(0 && "NYI: fff_fallback tailcall");
+  case  0: assert(0 && "NYI: fff_fallback retry");
+  default: /* FFH_RES(n) */
+    vm_return(L, link, -2, res-1);
+  }
 }
 
 
