@@ -330,7 +330,7 @@ void execute(lua_State *L) {
       lj_gc_step_fixtop(L);
     }
     {
-      GCtab *tab = lj_tab_dup(L, tabV(BASE+D));
+      GCtab *tab = lj_tab_dup(L, kgcref(D, GCtab));
       setgcVraw(BASE+A, (GCobj*)tab, LJ_TTAB);
     }
     break;
