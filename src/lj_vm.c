@@ -444,7 +444,25 @@ void execute(lua_State *L) {
     break;
   case BC_CALLMT: assert(0 && "NYI BYTECODE: CALLMT");
   case BC_CALLT:  assert(0 && "NYI BYTECODE: CALLT");
-  case BC_ITERC:  assert(0 && "NYI BYTECODE: ITERC");
+  case BC_ITERC:
+    TRACE("ITERC");
+    {
+      TValue *fb = BASE+A+2;
+      fb[0] = fb[-4]; // Copy state.
+      fb[1] = fb[-3]; // Copy control var.
+      fb[-2] = fb[-5]; // Copy callable.
+      NARGS = 2; // Handle like a regular 2-arg call.
+      TValue *f = fb-2;
+      if (!tvisfunc(f)) {
+        lj_meta_call(L, f, fb+NARGS);
+        NARGS += 1;
+        assert(BASE != KBASE && "NYI: ITERC tail call");
+      }
+      BASE = fb;
+      BASE[-1].u64 = (intptr_t)PC;
+      PC = mref(funcV(f)->l.pc, BCIns);
+    }
+    break;
   case BC_ITERN:  assert(0 && "NYI BYTECODE: ITERN");
   case BC_VARG:
     TRACE("VARG");
