@@ -579,6 +579,37 @@ void execute(lua_State *L) {
       FIXME: need symbols for pseudo opcodes.
     */
     switch ((uint32_t)OP) {
+    case 0x65:
+      TRACEFF("ipairs_aux");
+      {
+        TValue *tab = BASE;
+        TValue *i = BASE+1;
+        const TValue *v;
+        if (!tvistab(tab) || !tvisnum(i)) {
+          fff_fallback(L);
+          break;
+        }
+        uint64_t link = BASE[-1].u64;
+        /* Increment index. */
+        uint32_t n = numV(i) + 1;
+        setnumV(BASE-2, n);
+        /* Try to load value from table (if this fails the iterator ends.)  */
+        if (n < tabV(tab)->asize) {
+          /* Value is in array part of tab. */
+          v = arrayslot(tabV(tab), n);
+          if (tvisnil(v)) goto end;
+        } else {
+          if (!tabV(tab)->hmask) goto end;
+          v = lj_tab_getinth(tabV(tab), n);
+          if (!v) goto end;
+        }
+        BASE[-1] = *v; /* Copy array slot. */
+        vm_return(L, link, -2, 2); /* Iterate: return (i, value). */
+        break;
+        /* End of interator: return no values. */
+        end: vm_return(L, link, -2, 0);
+      }
+      break;
     case 0x66:
       TRACEFF("ipairs");
       /* XXX - punt to fallback. */
