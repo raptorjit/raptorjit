@@ -21,6 +21,7 @@
 
 #define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%ld\n", \
                            name, A, B, C, D, TOP-BASE)
+#define TRACEFF(name) printf("ASMFF  OP=%-3x %-10s\n", OP, name)
 
 #define neg(n) (-1 - (n))
 #define max(a,b) ((a)>(b) ? (a) : (b))
@@ -573,11 +574,27 @@ void execute(lua_State *L) {
     }
     break;
   default:
-    /* Handle ASM fast functions. */
-    if (OP >= BC__MAX && OP < BC__MAX+GG_NUM_ASMFF)
+    /*
+      XXX - handle ASM fast functions.
+      FIXME: need symbols for pseudo opcodes.
+    */
+    switch ((uint32_t)OP) {
+    case 0x66:
+      TRACEFF("ipairs");
+      /* XXX - punt to fallback. */
       fff_fallback(L);
-    else
-      assert(0 && "INVALID BYTECODE");
+      break;
+    case 0x6a:
+      TRACEFF("tonumber");
+      {
+        if (NARGS != 1 || !tvisnumber(BASE))
+          fff_fallback(L);
+        else
+          vm_return(L, BASE[-1].u64, 0, 1);
+      }
+      break;
+    default: assert(0 && "INVALID BYTECODE");
+    }
   }
   /* Tail recursion. */
   execute(L);
