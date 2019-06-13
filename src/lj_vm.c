@@ -515,9 +515,19 @@ void execute(lua_State *L) {
     break;
   case BC_IFORL:  assert(0 && "NYI BYTECODE: IFORL");
   case BC_JFORL:  assert(0 && "NYI BYTECODE: JFORL");
-  case BC_ITERL:  assert(0 && "NYI BYTECODE: ITERL");
-  case BC_IITERL: assert(0 && "NYI BYTECODE: IITERL");
-  case BC_JITERL: assert(0 && "NYI BYTECODE: JITERL");
+  case BC_ITERL:
+    TRACE("ITERL");
+    /* XXX hotloop */
+  case BC_IITERL:
+    if (OP == BC_IITERL) TRACE("IITERL");
+    if (!tvisnil(BASE+A)) {
+      /* Save control var and branch. */
+      branchPC(D);
+      BASE[A-1] = *(BASE+A);
+    }
+  case BC_JITERL:
+    if (OP == BC_JITERL) assert(0 && "NYI BYTECODE: JITERL");
+    break;
   case BC_LOOP:   assert(0 && "NYI BYTECODE: LOOP");
   case BC_ILOOP:  assert(0 && "NYI BYTECODE: ILOOP");
   case BC_JLOOP:  assert(0 && "NYI BYTECODE: JLOOP");
