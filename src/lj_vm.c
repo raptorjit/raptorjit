@@ -634,6 +634,21 @@ void execute(lua_State *L) {
           vm_return(L, BASE[-1].u64, 0, 1);
       }
       break;
+    case 0x6c:
+      TRACEFF("pcall");
+      {
+        /* First argument is the function to call, consume it. */
+        TValue *f = BASE;
+        NARGS -= 1;
+        /* Push pcall frame. */
+        BASE += 2;
+        copyTVs(L, BASE, BASE-1, NARGS, NARGS); /* Copy function arguments. */
+        BASE[-1].u64 = 16 + FRAME_PCALL + (hook_active(G(L)) ? 1 : 0);
+        /* Call protected function. */
+        assert(tvisfunc(f) && "NYI: pcall to non-function");
+        PC = mref(funcV(f)->l.pc, BCIns);
+      }
+      break;
     default: assert(0 && "INVALID BYTECODE");
     }
   }
@@ -688,6 +703,25 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       TOP = BASE + pt->framesize;
       KBASE = mref(pt->k, void);
       return 0;
+    }
+    break;
+  }
+  switch (link & FRAME_TYPEP) {
+  case FRAME_PCALL:
+  case FRAME_PCALLH:
+    {
+      /* Pop pcall frame, and adjust resultofs accordingly.
+       *
+       * Decrement resultofs by one, and increment nresults by one.
+       * Push TRUE for successful return from a pcall in front of results.
+       * (We know there is space because we freed two slots from the pcall
+       * frame.)
+       *
+       * Return from call frame with the adjusted resultofs/nresults.
+       */
+      BASE -= 2; resultofs += 2;
+      resultofs--; nresults++; setboolV(BASE+resultofs, 1);
+      return vm_return(L, BASE[-1].u64, resultofs, nresults);
     }
     break;
   }
