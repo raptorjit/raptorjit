@@ -376,7 +376,22 @@ void execute(lua_State *L) {
     }
   case BC_TGETB:  assert(0 && "NYI BYTECODE: TGETB");
   case BC_TGETR:  assert(0 && "NYI BYTECODE: TGETR");
-  case BC_TSETV:  assert(0 && "NYI BYTECODE: TSETV");
+  case BC_TSETV:
+    TRACE("TSETV");
+    {
+      TValue *o = BASE+B;
+      if (tvistab(o)) {
+        GCtab *tab = tabV(o);
+        copyTV(L, lj_tab_set(L, tab, BASE+C), BASE+A);
+        lj_gc_anybarriert(L, tab);
+      } else {
+        TValue *v = lj_meta_tset(L, o, BASE+C);
+        assert(v != NULL && "NYI: TSETV __newindex");
+        /* NOBARRIER: lj_meta_tset ensures the table is not black. */
+        copyTV(L, v, BASE+A);
+      }
+    }
+    break;
   case BC_TSETS:
     TRACE("TSETS");
     {
@@ -393,7 +408,7 @@ void execute(lua_State *L) {
         // XXX SAVE_L
         // XXX SAVE_PC
         TValue *v = lj_meta_tset(L, o, &tvkey);
-        assert(v != NULL && "NYI: lj_meta_tset unreachable");
+        assert(v != NULL && "NYI: TSETS __newindex");
         /* NOBARRIER: lj_meta_tset ensures the table is not black. */
         copyTV(L, v, BASE+A);
       }
