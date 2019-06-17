@@ -690,14 +690,19 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
     {
       CFrame *cf = (CFrame*)L->cframe;
       int delta = link>>3;
-      TValue *dst = BASE - delta;
-      /* Push TRUE for successful return from a pcall.  */
-      if (link & FRAME_P) setboolV(dst++, 1);
-      assert(cf->nresults>=0);
+      int nexpected = cf->nresults;
+      TValue *dst = BASE + resultofs;
       STATE = ~LJ_VMST_C;
+      /* Push TRUE for successful return from a pcall.  */
+      if (link & FRAME_P) {
+        setboolV(--dst, 1);
+        nresults += 1;
+      }
+      if (nexpected < 0) // Return all results.
+        nexpected = nresults;
       /* Copy results into caller frame */
-      dst = copyTVs(L, dst, BASE+resultofs, cf->nresults, nresults);
-      TOP = dst + 1;
+      dst = copyTVs(L, BASE-2, dst, nexpected, nresults);
+      TOP = dst; // When returning from C frames, last result is the new TOP.
       BASE -= delta;
       return 1;
     }
@@ -708,9 +713,9 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       MULTRES = nresults;
       /* Find details in caller's CALL instruction operands. */
       int delta = bc_a(*(PC-1));
-      int nexpected = bc_b(*(PC-1));
+      int nexpected = bc_b(*(PC-1)) - 1;
       GCproto *pt;
-      if (nexpected == 0) // Return all results.
+      if (nexpected < 0) // Return all results.
         nexpected = nresults;
       copyTVs(L, BASE-2, BASE+resultofs, nexpected, nresults);
       BASE -= 2 + delta;
