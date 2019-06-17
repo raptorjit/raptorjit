@@ -17,7 +17,7 @@ LJ_ASMF int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
 			 lua_CPFunction cp);
 LJ_ASMF int lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef);
 LJ_ASMF_NORET void lj_vm_unwind_c(void *cframe, int errcode);
-LJ_ASMF_NORET void lj_vm_unwind_ff(void *cframe);
+LJ_ASMF_NORET void lj_vm_unwind_ff(CFrame *cframe);
 LJ_ASMF void lj_vm_unwind_c_eh(void);
 LJ_ASMF void lj_vm_unwind_ff_eh(void);
 LJ_ASMF void lj_vm_unwind_rethrow(void);

@@ -854,7 +854,13 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
 
 int lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef) { assert(0 && "NYI"); }
 void lj_vm_unwind_c(void *cframe, int errcode) { assert(0 && "NYI"); }
-void lj_vm_unwind_ff(void *cframe)             { assert(0 && "NYI"); };
+void lj_vm_unwind_ff(CFrame *cframe) {
+  lua_State *L = cframe->L;
+  uint64_t link = BASE[-1].u64;
+  setboolV(BASE-1, 0); /* Push FALSE for unsuccessful return from a pcall.  */
+  vm_return(L, link, -1, 2);
+  execute(L);
+}
 void lj_vm_unwind_c_eh(void)                   { assert(0 && "NYI"); }
 void lj_vm_unwind_ff_eh(void)                  { assert(0 && "NYI"); }
 void lj_vm_unwind_rethrow(void)                { assert(0 && "NYI"); }
