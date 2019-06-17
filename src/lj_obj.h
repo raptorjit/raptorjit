@@ -555,9 +555,10 @@ typedef struct global_State {
 typedef struct CFrame {
   struct CFrame *previous;
   lua_State *L;
-  int nresults;
+  int nresults, multres, errfunc;
   volatile int status;
   jmp_buf jb;
+  MRef *pc;
 } CFrame;
 
 #define mainthread(g)	(&gcref(g->mainthref)->th)
