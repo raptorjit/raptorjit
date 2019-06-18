@@ -18,6 +18,7 @@
 #include "lj_tab.h"
 #include "lj_meta.h"
 #include "lj_func.h"
+#include "lj_buf.h"
 
 #define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%ld\n", \
                            name, A, B, C, D, TOP-BASE)
@@ -662,6 +663,28 @@ void execute(lua_State *L) {
         /* Call protected function. */
         assert(tvisfunc(f) && "NYI: pcall to non-function");
         PC = mref(funcV(f)->l.pc, BCIns);
+      }
+      break;
+    case 0x98:
+      /* Fast function string operations. */
+      {
+        if (G(L)->gc.total >= G(L)->gc.threshold)
+          lj_gc_step(L);
+        if (!tvisstr(BASE))
+          fff_fallback(L);
+        GCstr *str = strV(BASE);
+        SBuf *buf = &G(L)->tmpbuf;
+        buf->L = L;
+        buf->p = buf->b;
+        switch ((uint32_t)OP) {
+        case 0x98:
+          TRACEFF("string_lower");
+          lj_buf_putstr_lower(buf, str);
+          break;
+        default: assert(0 && "NYI: fast string operation");
+        }
+        setgcVraw(BASE, (GCobj *)lj_buf_tostr(buf), LJ_TSTR);
+        vm_return(L, BASE[-1].u64, 0, 1);
       }
       break;
     default: assert(0 && "INVALID BYTECODE");
