@@ -860,6 +860,7 @@ void lj_vm_unwind_ff(CFrame *cframe) {
   setboolV(BASE-1, 0); /* Push FALSE for unsuccessful return from a pcall.  */
   vm_return(L, link, -1, 2);
   execute(L);
+  exit(EXIT_FAILURE); /* Unreachable. */
 }
 void lj_vm_unwind_c_eh(void)                   { assert(0 && "NYI"); }
 void lj_vm_unwind_ff_eh(void)                  { assert(0 && "NYI"); }
