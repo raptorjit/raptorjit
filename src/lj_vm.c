@@ -320,7 +320,13 @@ void execute(lua_State *L) {
   case BC_USETS:  assert(0 && "NYI BYTECODE: USETS");
   case BC_USETN:  assert(0 && "NYI BYTECODE: USETN");
   case BC_USETP:  assert(0 && "NYI BYTECODE: USETP");
-  case BC_UCLO:   assert(0 && "NYI BYTECODE: UCLO");
+  case BC_UCLO:
+    /* UCLO: Close upvalues for slots ≥ rbase and jump to target D. */
+    TRACE("UCLO");
+    if (L->openupval > 0)
+      lj_func_closeuv(L, BASE+A);
+    branchPC(D);
+    break;
   case BC_FNEW:
     TRACE("FNEW");
     {
