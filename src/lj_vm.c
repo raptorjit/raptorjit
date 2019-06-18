@@ -511,24 +511,22 @@ void execute(lua_State *L) {
     }
     break;
   case BC_ISNEXT: assert(0 && "NYI BYTECODE: ISNEXT");
-  case BC_RETM:   assert(0 && "NYI BYTECODE: RETM");
-  case BC_RET:    assert(0 && "NYI BYTECODE: RET");
+  case BC_RETM:
+    TRACE("RETM");
+    if (vm_return(L, BASE[-1].u64, A, D+MULTRES)) return;
+    break;
+  case BC_RET:
+    TRACE("RET");
+    if (vm_return(L, BASE[-1].u64, A, D-1)) return;
+    break;
   case BC_RET0:
     TRACE("RET0");
-    {
-      int resultofs = A;
-      uint64_t link = BASE[-1].u64;
-      MULTRES = D-1;
-      switch (link & FRAME_TYPE) {
-      case FRAME_LUA: assert(0 && "NYI: Return to Lua frame");
-      case FRAME_CONT: assert(0 && "NYI: Return to Continuation frame");
-      case FRAME_VARG: assert(0 && "NYI: Return to vararg frame");
-      case FRAME_C:
-        if (vm_return(L, link, resultofs, 0)) return;
-      }
-    }
+    if (vm_return(L, BASE[-1].u64, A, 0)) return;
     break;
-  case BC_RET1:   assert(0 && "NYI BYTECODE: RET1");
+  case BC_RET1:
+    TRACE("RET1");
+    if (vm_return(L, BASE[-1].u64, A, 1)) return;
+    break;
   case BC_FORL:
     TRACE("FORL");
     break;        /* XXX hotloop */
