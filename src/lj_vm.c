@@ -741,7 +741,7 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
         nresults += 1;
       }
       if (nexpected < 0) // Return all results.
-        nexpected = nresults;
+        MULTRES = nexpected = nresults;
       /* Copy results into caller frame */
       dst = copyTVs(L, BASE-2, dst, nexpected, nresults);
       TOP = dst; // When returning from C frames, last result is the new TOP.
@@ -752,13 +752,12 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
   case FRAME_LUA:
     PC = (BCIns*)link;
     {
-      MULTRES = nresults;
       /* Find details in caller's CALL instruction operands. */
       int delta = bc_a(*(PC-1));
       int nexpected = bc_b(*(PC-1)) - 1;
       GCproto *pt;
       if (nexpected < 0) // Return all results.
-        nexpected = nresults;
+        MULTRES = nexpected = nresults;
       copyTVs(L, BASE-2, BASE+resultofs, nexpected, nresults);
       BASE -= 2 + delta;
       pt = funcproto(funcV(BASE-2));
