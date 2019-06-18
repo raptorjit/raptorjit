@@ -213,8 +213,23 @@ void execute(lua_State *L) {
   case BC_ISGT:   assert(0 && "NYI BYTECODE: ISGT");
   case BC_ISEQV:  assert(0 && "NYI BYTECODE: ISEQV");
   case BC_ISNEV:  assert(0 && "NYI BYTECODE: ISNEV");
-  case BC_ISEQS:  assert(0 && "NYI BYTECODE: ISEQS");
-  case BC_ISNES:  assert(0 && "NYI BYTECODE: ISNES");
+  case BC_ISEQS:
+    /* ISEQS: Take following JMP instruction if A is equal to string D. */
+    TRACE("ISEQS");
+  case BC_ISNES:
+    /* ISNES: Take following JMP instruction if A is not equal to string D. */
+    if (OP == BC_ISNES)
+      TRACE("ISNES");
+    {
+      int flag = 0;
+      if (tvisstr(BASE+A))
+        flag = (BASE[A].u64 == kgcref(D, TValue)->u64);
+      else if (tviscdata(BASE+A))
+        assert(tvisstr(BASE+A) && "NYI: ISEQS on cdata.");
+      curins = *PC++;
+      if (flag ^ (OP == BC_ISNES)) branchPC(D); // Invert flag on ISNES.
+    }
+    break;
   case BC_ISEQN:  assert(0 && "NYI BYTECODE: ISEQN");
   case BC_ISNEN:  assert(0 && "NYI BYTECODE: ISNEN");
   case BC_ISEQP:  assert(0 && "NYI BYTECODE: ISEQP");
