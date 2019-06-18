@@ -264,7 +264,23 @@ void execute(lua_State *L) {
     break;
   case BC_NOT:    assert(0 && "NYI BYTECODE: NOT");
   case BC_UNM:    assert(0 && "NYI BYTECODE: UNM");
-  case BC_LEN:    assert(0 && "NYI BYTECODE: LEN");
+  case BC_LEN:
+    /* LEN: Set A to #D (object length). */
+    TRACE("LEN");
+    {
+      TValue *dst = BASE+A;
+      TValue *o = BASE+D;
+      if (tvisstr(o)) {
+        setnumV(dst, strV(o)->len);
+      } else if (tvistab(o)) {
+        GCtab *t = tabV(o);
+        assert(!t->metatable && "NYI: LEN on meta table");
+        setnumV(dst, lj_tab_len(t));
+      } else {
+        assert(0 && "NYI: LEN on cdata");
+      }
+    }
+    break;
   case BC_ADDVN:  assert(0 && "NYI BYTECODE: ADDVN");
   case BC_SUBVN:  assert(0 && "NYI BYTECODE: SUBVN");
   case BC_MULVN:  assert(0 && "NYI BYTECODE: MULVN");
