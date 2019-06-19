@@ -537,7 +537,50 @@ void execute(lua_State *L) {
       PC = mref(funcV(f)->l.pc, BCIns);
     }
     break;
-  case BC_ITERN:  assert(0 && "NYI BYTECODE: ITERN");
+  case BC_ITERN:
+    /* ITERN: Specialized ITERC, if iterator function A-3 is next(). */
+    TRACE("ITERN");
+    {
+      // NYI: add hotloop, record BC_ITERN.
+      GCtab *tab = tabV(BASE + A-2);
+      TValue *state = BASE + A-1;
+      TValue *key = BASE + A+0;
+      TValue *val = BASE + A+1;
+      int i = state->i;
+      /* Advance to ITERL instruction. */
+      curins = *PC++;
+      /* Traverse array part. */
+      while (i < tab->asize) {
+        cTValue *entry = arrayslot(tab, state->i);
+        if (tvisnil(entry) && ++i) continue; // Skip holes in array part.
+        /* Return array index as a numeric key. */
+        setnumV(key, state->i-1);
+        /* Copy array slot to returned value. */
+        *val = *entry;
+        /* Update control var. */
+        state->i = i;
+        goto itern_next;
+      }
+      /* Traverse hash part. */
+      i -= tab->asize;
+      while (i <= tab->hmask) {
+        Node *n = &noderef(tab->node)[i];
+        if (tvisnil(&n->val) && ++i) continue; // Skip holes in hash part.
+        /* Copy key and value from hash slot. */
+        *key = n->key;
+        *val = n->val;
+        /* Update control var. */
+        state->i = tab->asize + i;
+        goto itern_next;
+      }
+      goto itern_end;
+    itern_next:
+      /* Iterate: branch to target from ITERL. */
+      branchPC(D);
+    itern_end:
+      /* End of iteration: advance to ITERL+1. */
+      break;
+    }
   case BC_VARG:
     TRACE("VARG");
     {
