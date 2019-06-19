@@ -696,6 +696,30 @@ void execute(lua_State *L) {
       /* XXX - punt to fallback. */
       fff_fallback(L);
       break;
+    case 0x67:
+      TRACEFF("getmetatable");
+      {
+        GCtab *mt;
+        if (tvistab(BASE))
+          mt = tabref(tabV(BASE)->metatable);
+        else if (tvisudata(BASE))
+          mt = tabref(udataV(BASE)->metatable);
+        else
+          mt = tabref(basemt_obj(G(L), BASE));
+        if (mt) {
+          cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), MM_metatable));
+          BASE[-2] = mo ? *mo : *((TValue *) mt);
+        } else {
+          setnilV(BASE-2);
+        }
+        vm_return(L, BASE[-1].u64, -2, 1);
+      }
+      break;
+    case 0x68:
+      TRACEFF("setmetatable");
+      /* XXX - punt to fallback. */
+      fff_fallback(L);
+      break;
     case 0x6a:
       TRACEFF("tonumber");
       {
