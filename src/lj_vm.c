@@ -660,6 +660,11 @@ void execute(lua_State *L) {
       FIXME: need symbols for pseudo opcodes.
     */
     switch ((uint32_t)OP) {
+    case 0x64:
+      TRACEFF("pairs");
+      /* XXX - punt to fallback. */
+      fff_fallback(L);
+      break;
     case 0x65:
       TRACEFF("ipairs_aux");
       {
