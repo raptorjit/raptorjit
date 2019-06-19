@@ -210,7 +210,27 @@ void execute(lua_State *L) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
   case BC_ISLE:   assert(0 && "NYI BYTECODE: ISLE");
-  case BC_ISGT:   assert(0 && "NYI BYTECODE: ISGT");
+  case BC_ISGT:
+    /* ISGT: Take following JMP instruction if A > D. */
+    TRACE("ISGT");
+    {
+      int flag;
+      if (tvisnum(BASE+A) && tvisnum(BASE+D)) {
+        /* Compare two floats. */
+        flag = (BASE+A)->n > (BASE+D)->n;
+      } else {
+        /* Fall back to meta-comparison. */
+        TValue *res = lj_meta_comp(L, BASE+A, BASE+D, OP);
+        if ((intptr_t)res > 1)
+          assert(0 && "NYI: ISGT metamethod");
+        else
+          flag = (intptr_t)res == 1;
+      }
+      /* Advance to jump instruction. */
+      curins = *PC++;
+      if (flag) branchPC(D);
+    }
+    break;
   case BC_ISEQV:  assert(0 && "NYI BYTECODE: ISEQV");
   case BC_ISNEV:  assert(0 && "NYI BYTECODE: ISNEV");
   case BC_ISEQS:
