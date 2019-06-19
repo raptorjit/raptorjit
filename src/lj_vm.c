@@ -546,7 +546,24 @@ void execute(lua_State *L) {
       copyTVs(L, BASE+A, BASE-2-delta+C, B>0 ? B : MULTRES, MULTRES);
     }
     break;
-  case BC_ISNEXT: assert(0 && "NYI BYTECODE: ISNEXT");
+  case BC_ISNEXT:
+    /* ISNEXT: Verify ITERN specialization and jump. */
+    TRACE("ISNEXT");
+    {
+      TValue *fn = BASE + A-3;
+      TValue *tab = BASE + A-2;
+      TValue *nil = BASE + A-1;
+      branchPC(D);
+      if (tvisfunc(fn)
+          && funcV(fn)->c.ffid == FF_next_N
+          && tvistab(tab)
+          && tvisnil(nil))
+        BASE[A-1].u64 = U64x(fffe7fff, 00000000); // Initialize control var.
+      else
+        /* Despecialize bytecode if any of the checks fail. */
+        setbc_op(PC, BC_ITERC);
+    }
+    break;
   case BC_RETM:
     TRACE("RETM");
     if (vm_return(L, BASE[-1].u64, A, D+MULTRES)) return;
