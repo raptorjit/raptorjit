@@ -743,17 +743,17 @@ void execute(lua_State *L) {
         if (n < tabV(tab)->asize) {
           /* Value is in array part of tab. */
           v = arrayslot(tabV(tab), n);
-          if (tvisnil(v)) goto end;
+          if (tvisnil(v)) goto ipairs_end;
         } else {
-          if (!tabV(tab)->hmask) goto end;
+          if (!tabV(tab)->hmask) goto ipairs_end;
           v = lj_tab_getinth(tabV(tab), n);
-          if (!v) goto end;
+          if (!v) goto ipairs_end;
         }
         BASE[-1] = *v; /* Copy array slot. */
         vm_return(L, link, -2, 2); /* Iterate: return (i, value). */
         break;
         /* End of interator: return no values. */
-        end: vm_return(L, link, -2, 0);
+        ipairs_end: vm_return(L, link, -2, 0);
       }
       break;
     case 0x66:
