@@ -1018,16 +1018,15 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   if ((res = _setjmp(cf.jb)) == 0) {
     /* Try */
     TValue *newbase = cp(L, f, ud);
-    if (newbase == NULL) {
-      return 0;
-    } else {
-      return luacall(L, 0, newbase, nresults, 0);
-    }      
+    if (newbase)
+      res = luacall(L, 0, newbase, nresults, 0);
   } else {
     /* Catch */
     assert(0 && "NYI cpcall error");
   }
-  return 0;
+  /* Unlink C frame. */
+  L->cframe = cf.previous;
+  return res;
 }
 
 int lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef) { assert(0 && "NYI"); }
