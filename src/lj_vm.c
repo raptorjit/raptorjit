@@ -956,6 +956,28 @@ void fff_fallback(lua_State *L) {
 }
 
 
+/* -- CFrame stack -------------------------------------------------------- */
+
+#define CFSTACK_SIZE 100
+static CFrame cfstack[CFSTACK_SIZE];
+
+CFrame *push_cframe(lua_State *L) {
+  CFrame *prev = L->cframe;
+  CFrame *cf = prev ? prev+1: &cfstack[0];
+  assert(cf < &cfstack[CFSTACK_SIZE] && "cfstack overflow");
+  cf->previous = prev;
+  cf->L = L;
+  L->cframe = cf;
+  return cf;
+}
+
+void pop_cframe(lua_State *L) {
+  CFrame *cf = L->cframe;
+  L->cframe = cf->previous;
+  memset(cf, 0, sizeof(CFrame));
+}
+
+
 /* -- API functions ------------------------------------------------------- */
 
 /* Call a Lua function from C. */
@@ -964,9 +986,9 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   int res;
   GCfunc *func;
   /* Add new CFrame to the chain. */
-  CFrame cf = { L->cframe, L, nres };
+  CFrame *cf = push_cframe(L);
+  cf->nresults = nres;
   //assert(nres >= 0 && "NYI: LUA_MULTRET");
-  L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
   /* Set return frame link. */
@@ -980,7 +1002,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   func = funcV(newbase-2);
   PC = mref(func->l.pc, BCIns);
   /* Setup "catch" jump buffer for a protected call. */
-  if ((res = _setjmp(cf.jb)) == 0) {
+  if ((res = _setjmp(cf->jb)) == 0) {
     /* Try */
     execute(L);
   } else {
@@ -988,7 +1010,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
     assert(0 && "NYI: Catch exception from Lua call");
   }
   /* Unlink C frame. */
-  L->cframe = cf.previous;
+  pop_cframe(L);
   /* XXX */
   return LUA_OK;
 }
@@ -1011,11 +1033,11 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   /* "Neg. delta means cframe w/o frame." */
   int nresults = -savestack(L, L->top) / sizeof(TValue);
   /* Add to CFrame chain. */
-  CFrame cf = { L->cframe, L, nresults };
-  L->cframe = &cf;
+  CFrame *cf = push_cframe(L);
+  cf->nresults = nresults;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
-  if ((res = _setjmp(cf.jb)) == 0) {
+  if ((res = _setjmp(cf->jb)) == 0) {
     /* Try */
     TValue *newbase = cp(L, f, ud);
     if (newbase == NULL) {
