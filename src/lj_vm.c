@@ -686,7 +686,7 @@ void execute(lua_State *L) {
       /* Base for new frame containing only fixed parameters. */
       BASE += 2 + NARGS;
       copyTV(L, BASE-2, oldbase-2);
-      BASE[-1].u64 = FRAME_VARG + (NARGS << 3);
+      BASE[-1].u64 = FRAME_VARG + ((BASE - oldbase) << 3);
       copyTVs(L, BASE, oldbase, pt->numparams, NARGS);
       TOP = BASE + pt->framesize;
       /* Set constant pool address. */
