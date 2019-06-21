@@ -241,13 +241,13 @@ void execute(lua_State *L) {
     if (OP == BC_ISNES)
       TRACE("ISNES");
     {
-      int flag = 0;
+      int flag = (OP == BC_ISNES); // Invert flag on ISNES.
       if (tvisstr(BASE+A))
-        flag = (BASE[A].u64 == kgcref(D, TValue)->u64);
+        flag ^= (BASE[A].u64 == kgcref(D, TValue)->u64);
       else if (tviscdata(BASE+A))
-        assert(tvisstr(BASE+A) && "NYI: ISEQS on cdata.");
+        assert(tvisstr(BASE+A) && "NYI: ISEQS/ISNES on cdata.");
       curins = *PC++;
-      if (flag ^ (OP == BC_ISNES)) branchPC(D); // Invert flag on ISNES.
+      if (flag) branchPC(D);
     }
     break;
   case BC_ISEQN:  assert(0 && "NYI BYTECODE: ISEQN");
