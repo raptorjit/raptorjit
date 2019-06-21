@@ -551,14 +551,14 @@ void execute(lua_State *L) {
       curins = *PC++;
       /* Traverse array part. */
       while (i < tab->asize) {
-        cTValue *entry = arrayslot(tab, state->i);
+        cTValue *entry = arrayslot(tab, i);
         if (tvisnil(entry) && ++i) continue; // Skip holes in array part.
         /* Return array index as a numeric key. */
-        setnumV(key, state->i-1);
+        setnumV(key, i);
         /* Copy array slot to returned value. */
         *val = *entry;
         /* Update control var. */
-        state->i = i;
+        state->i = i+1;
         goto itern_next;
       }
       /* Traverse hash part. */
@@ -570,7 +570,7 @@ void execute(lua_State *L) {
         *key = n->key;
         *val = n->val;
         /* Update control var. */
-        state->i = tab->asize + i;
+        state->i = tab->asize + i+1;
         goto itern_next;
       }
       goto itern_end;
