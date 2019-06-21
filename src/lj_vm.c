@@ -720,6 +720,18 @@ void execute(lua_State *L) {
       FIXME: need symbols for pseudo opcodes.
     */
     switch ((uint32_t)OP) {
+    case 0x62:
+      TRACEFF("type");
+      {
+        uint32_t type = itype(BASE);
+        GCfuncC *f = &funcV(BASE-2)->c;
+        if (type < LJ_TISNUM)
+          type = LJ_TISNUM;
+        type = ~type;
+        BASE[-2] = f->upvalue[type];
+        vm_return(L, BASE[-1].u64, -2, 1);
+      }
+      break;
     case 0x64:
       TRACEFF("pairs");
       /* XXX - punt to fallback. */
