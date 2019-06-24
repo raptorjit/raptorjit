@@ -649,7 +649,6 @@ void execute(lua_State *L) {
     TRACE("FORL");
     break;        /* XXX hotloop */
   case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
-  case BC__MAX:   assert(0 && "Illegal bytecode: BC__MAX"); /* Suppress warning */
   case BC_FORI:
     TRACE("FORI");
     {
@@ -742,6 +741,15 @@ void execute(lua_State *L) {
       FIXME: need symbols for pseudo opcodes.
     */
     switch ((uint32_t)OP) {
+    case 0x61:
+      TRACEFF("assert");
+      {
+        if (tvistruecond(BASE))
+          vm_return(L, BASE[-1].u64, 0, C);
+        else
+          fff_fallback(L);
+      }
+      break;
     case 0x62:
       TRACEFF("type");
       {
