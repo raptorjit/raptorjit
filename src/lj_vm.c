@@ -925,6 +925,14 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       return 0;
     }
     break;
+  case FRAME_VARG:
+    /* Return from vararg function: relocate BASE down and resultofs up. */
+    {
+      int delta = link >> 3;
+      BASE -= delta;
+      return vm_return(L, BASE[-1].u64, resultofs + delta, nresults);
+    }
+    break;
   }
   switch (link & FRAME_TYPEP) {
   case FRAME_PCALL:
