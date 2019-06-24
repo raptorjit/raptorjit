@@ -267,7 +267,7 @@ void execute(lua_State *L) {
       if (tvisstr(BASE+A))
         flag ^= (BASE[A].u64 == kgcref(D, TValue)->u64);
       else if (tviscdata(BASE+A))
-        assert(tvisstr(BASE+A) && "NYI: ISEQS/ISNES on cdata.");
+        assert(0 && "NYI: ISEQS/ISNES on cdata.");
       curins = *PC++;
       if (flag) branchPC(D);
     }
