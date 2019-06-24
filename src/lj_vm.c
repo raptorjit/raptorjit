@@ -231,8 +231,30 @@ void execute(lua_State *L) {
       if (flag) branchPC(D);
     }
     break;
-  case BC_ISEQV:  assert(0 && "NYI BYTECODE: ISEQV");
-  case BC_ISNEV:  assert(0 && "NYI BYTECODE: ISNEV");
+  case BC_ISEQV:
+    /* ISEQV: Take following JMP instruction if A is equal to D. */
+    TRACE("ISEQV");
+  case BC_ISNEV:
+    /* ISNEV: Take following JMP instruction if A is not equal to D. */
+    if (OP == BC_ISNEV)
+      TRACE("ISNEV");
+    {
+      TValue *x = BASE+A; TValue *y = BASE+D;
+      int flag = (OP == BC_ISNEV); // Invert flag on ISNEV.
+      if (tvisnum(x) && tvisnum(y))
+        flag ^= (x->n == y->n);
+      else if (tviscdata(x) || tviscdata(y))
+        assert(0 && "NYI: ISEQV/ISNEV on cdata.");
+      else if (x->u64 == y->u64)
+        // Same GCobjs or pvalues?
+        flag ^= 1;
+      else if (itype(x) <= LJ_TISTABUD && itype(y) <= LJ_TISTABUD)
+        // Different tables or userdatas. Need to check __eq metamethod.
+        assert(0 && "NYI: ISEQV/ISNEV on tables/userdatas.");
+      curins = *PC++;
+      if (flag) branchPC(D);
+    }
+    break;
   case BC_ISEQS:
     /* ISEQS: Take following JMP instruction if A is equal to string D. */
     TRACE("ISEQS");
