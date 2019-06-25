@@ -265,7 +265,7 @@ void execute(lua_State *L) {
     {
       int flag = (OP == BC_ISNES); // Invert flag on ISNES.
       if (tvisstr(BASE+A))
-        flag ^= (BASE[A].u64 == kgcref(D, TValue)->u64);
+        flag ^= (strV(BASE+A) == kgcref(D, GCstr));
       else if (tviscdata(BASE+A))
         assert(0 && "NYI: ISEQS/ISNES on cdata.");
       curins = *PC++;
