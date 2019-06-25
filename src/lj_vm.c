@@ -867,6 +867,32 @@ void execute(lua_State *L) {
         PC = mref(funcV(f)->l.pc, BCIns);
       }
       break;
+    case 0x96:
+      TRACEFF("sub");
+      {
+        if (G(L)->gc.total > G(L)->gc.threshold)
+          lj_gc_step_fixtop(L);
+        if (NARGS < 2 || !tvisstr(BASE) || !tvisnum(BASE+1)
+            || (NARGS > 2 && !tvisnum(BASE+2))) {
+          fff_fallback(L);
+          break;
+        }
+        GCstr *str = strV(BASE);
+        int start = numV(BASE+1);
+        int end = NARGS > 2 ? numV(BASE+2) : -1;
+        if (start < 0)
+          start = max(start + str->len+1, 1);
+        else
+          start = max(min(start, str->len), 1);
+        if (end < 0)
+          end = max(end + str->len+1, 0);
+        else
+          end = min(end, str->len);
+        str = lj_str_new(L, strdata(str)+start-1, max(1+end-start, 0));
+        setgcVraw(BASE-2, (GCobj *)str, LJ_TSTR);
+        vm_return(L, BASE[-1].u64, -2, 1);
+      }
+      break;
     case 0x98:
       /* Fast function string operations. */
       {
