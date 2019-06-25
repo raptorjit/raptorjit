@@ -248,7 +248,10 @@ void execute(lua_State *L) {
       else if (x->u64 == y->u64)
         // Same GCobjs or pvalues?
         flag ^= 1;
-      else if (itype(x) <= LJ_TISTABUD && itype(y) <= LJ_TISTABUD)
+      else if (itype(x) != itype(y))
+        // Not the same type?
+        flag = flag;
+      else if (itype(x) <= LJ_TISTABUD)
         // Different tables or userdatas. Need to check __eq metamethod.
         assert(0 && "NYI: ISEQV/ISNEV on tables/userdatas.");
       curins = *PC++;
