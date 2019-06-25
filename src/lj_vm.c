@@ -279,8 +279,21 @@ void execute(lua_State *L) {
   case BC_ISNEN:  assert(0 && "NYI BYTECODE: ISNEN");
   case BC_ISEQP:  assert(0 && "NYI BYTECODE: ISEQP");
   case BC_ISNEP:  assert(0 && "NYI BYTECODE: ISNEP");
-  case BC_ISTC:   assert(0 && "NYI BYTECODE: ISTC");
-  case BC_ISFC:   assert(0 && "NYI BYTECODE: ISFC");
+  case BC_ISTC:
+    /* ISTC: Copy D to A and take following JMP instruction if D is true. */
+    TRACE("ISTC");
+  case BC_ISFC:
+    /* ISFC: Copy D to A and take following JMP instruction if D is false. */
+    if (OP == BC_ISFC)
+      TRACE("ISFC");
+    {
+      int flag = (OP == BC_ISFC); // Invert flag on ISFC.
+      BASE[A] = BASE[D];
+      flag ^= tvistruecond(BASE+D);
+      curins = *PC++;
+      if (flag) branchPC(D);
+    }
+    break;
   case BC_IST:
     /* IST: Take following JMP instruction if D is true. */
     TRACE("IST");
