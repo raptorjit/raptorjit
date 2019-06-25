@@ -818,7 +818,7 @@ void execute(lua_State *L) {
           mt = tabref(basemt_obj(G(L), BASE));
         if (mt) {
           cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), MM_metatable));
-          BASE[-2] = mo ? *mo : *((TValue *) mt);
+          setgcVraw(BASE-2, (GCobj*)(mo ? (GCtab*)mo : mt), LJ_TTAB);
         } else {
           setnilV(BASE-2);
         }
