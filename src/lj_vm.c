@@ -770,7 +770,7 @@ void execute(lua_State *L) {
       TRACEFF("assert");
       {
         if (tvistruecond(BASE))
-          vm_return(L, BASE[-1].u64, 0, C);
+          vm_return(L, BASE[-1].u64, 0, NARGS);
         else
           fff_fallback(L);
       }
