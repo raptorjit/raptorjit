@@ -277,8 +277,23 @@ void execute(lua_State *L) {
       if (flag) branchPC(D);
     }
     break;
-  case BC_ISEQN:  assert(0 && "NYI BYTECODE: ISEQN");
-  case BC_ISNEN:  assert(0 && "NYI BYTECODE: ISNEN");
+  case BC_ISEQN:
+    /* ISEQN: Take following JMP if A is equal to number constant D. */
+    TRACE("ISEQN");
+  case BC_ISNEN:
+    /* ISNEN: Take following JMP if A is not equal to number constant D. */
+    if (OP == BC_ISNEN)
+      TRACE("ISNEN");
+    {
+      int flag = (OP == BC_ISNEN); // Invert flag on ISNEN.
+      if (tvisnum(BASE+A))
+        flag ^= numV(BASE+A) == numV(ktv(D));
+      else if (tviscdata(BASE+A))
+        assert(0 && "NYI: ISEQN/ISNEN on cdata.");
+      curins = *PC++;
+      if (flag) branchPC(D);
+    }
+    break;
   case BC_ISEQP:  assert(0 && "NYI BYTECODE: ISEQP");
   case BC_ISNEP:  assert(0 && "NYI BYTECODE: ISNEP");
   case BC_ISTC:
