@@ -205,7 +205,9 @@ static inline void branchPC(int offset)
 
 /* Execute virtual machine instructions in a tail-recursive loop. */
 void execute(lua_State *L) {
-  BCIns curins = *PC++;
+  BCIns curins;
+ execute:
+  curins = *PC++;
   switch (OP) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
   case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
@@ -919,7 +921,7 @@ void execute(lua_State *L) {
     }
   }
   /* Tail recursion. */
-  execute(L);
+  goto execute;
 }
 
 
