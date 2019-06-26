@@ -341,7 +341,14 @@ void execute(lua_State *L) {
       }
     }
     break;
-  case BC_ADDVN:  assert(0 && "NYI BYTECODE: ADDVN");
+  case BC_ADDVN:
+    /* ADDVN: Add number constant C to B and store the result in A. */
+    TRACE("ADDVN");
+    {
+      assert(tvisnum(BASE+B) && "NYI: ADDVN with meta method");
+      setnumV(BASE+A, numV(BASE+B) + numV(ktv(C)));
+    }
+    break;
   case BC_SUBVN:  assert(0 && "NYI BYTECODE: SUBVN");
   case BC_MULVN:  assert(0 && "NYI BYTECODE: MULVN");
   case BC_DIVVN:  assert(0 && "NYI BYTECODE: DIVVN");
