@@ -380,7 +380,7 @@ void execute(lua_State *L) {
   case BC_KSHORT:
     TRACE("KSHORT");
     /* BASE[A] = D */
-    setnumV(BASE+A, D);
+    setnumV(BASE+A, (int16_t) D); // D is a signed int16 literal.
     break;
   case BC_KNUM:   assert(0 && "NYI BYTECODE: KNUM");
   case BC_KPRI:
