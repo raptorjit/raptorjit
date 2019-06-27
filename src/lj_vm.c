@@ -421,7 +421,21 @@ void execute(lua_State *L) {
       BASE[A] = *mref(parent->uvptr[D]->uv.v, TValue);
     }
     break;
-  case BC_USETV:  assert(0 && "NYI BYTECODE: USETV");
+  case BC_USETV:
+    /* USETV: Set upvalue A to D. */
+    TRACE("USETV");
+    {
+      GCfuncL *parent = &(funcV(BASE-2)->l);
+      GCupval *uv = &parent->uvptr[A]->uv;
+      TValue *v = (TValue *)uv->v;
+      copyTV(L, v, BASE+D);
+      // Upvalue closed, marked black, and new value is collectable and white?
+      if (uv->closed && (uv->marked & LJ_GC_BLACK)
+          && tvisgcv(v) && iswhite(gcval(v)))
+        // Crossed a write barrier. Move the barrier forward.
+        lj_gc_barrieruv(G(L), v);
+    }
+    break;
   case BC_USETS:
     /* USETS: Set upvalue A to string constant D. */
     TRACE("USETS");
