@@ -657,12 +657,17 @@ void execute(lua_State *L) {
       PC = mref(funcV(f)->l.pc, BCIns);
     }
     break;
-  case BC_CALLMT: assert(0 && "NYI BYTECODE: CALLMT");
-  case BC_CALLT:
-    /* CALLT: Tailcall A(A+1, ..., A+D-1). */
-    TRACE("CALLT");
-    {
+  case BC_CALLMT: case BC_CALLT:
+    if (OP == BC_CALLMT) {
+      /* CALLMT: Tailcall A(A+1, ..., A+D+MULTRES) */
+      TRACE("CALLMT");
+      NARGS = D+MULTRES; /* nargs in MULTRES */
+    } else if (OP == BC_CALLT) {
+      /* CALLT: Tailcall A(A+1, ..., A+D-1). */
+      TRACE("CALLT");
       NARGS = D-1;
+    }
+    {
       MULTRES = NARGS;
       TValue *callbase = BASE + A+2;
       TValue *f = callbase-2;
