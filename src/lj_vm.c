@@ -364,7 +364,14 @@ void execute(lua_State *L) {
       setnumV(BASE+A, numV(BASE+B) + numV(ktv(C)));
     }
     break;
-  case BC_SUBVN:  assert(0 && "NYI BYTECODE: SUBVN");
+  case BC_SUBVN:
+    /* SUBVN: Subtract number constant C from  B and store the result in A. */
+    TRACE("SUBVN");
+    {
+      assert(tvisnum(BASE+B) && "NYI: SUBVN with meta method");
+      setnumV(BASE+A, numV(BASE+B) - numV(ktv(C)));
+    }
+    break;
   case BC_MULVN:  assert(0 && "NYI BYTECODE: MULVN");
   case BC_DIVVN:  assert(0 && "NYI BYTECODE: DIVVN");
   case BC_MODVN:  assert(0 && "NYI BYTECODE: MODVN");
