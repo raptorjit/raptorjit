@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <setjmp.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "lj_bc.h"
 #include "lj_ccall.h"
@@ -1263,8 +1264,8 @@ void lj_vm_exit_interp(void)  { assert(0 && "NYI"); }
 void lj_vm_exit_interp_notrack(void) { assert(0 && "NYI"); }
 
 /* Internal math helper functions. */
-double lj_vm_floor(double a)             { assert(0 && "NYI"); }
-double lj_vm_ceil(double a)              { assert(0 && "NYI"); }
+double lj_vm_floor(double a) { return floor(a); }
+double lj_vm_ceil(double a)  { return ceil(a); }
 
 void lj_vm_floor_sse(void)   { assert(0 && "NYI"); }
 void lj_vm_ceil_sse(void)    { assert(0 && "NYI"); }
