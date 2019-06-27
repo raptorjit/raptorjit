@@ -511,7 +511,25 @@ void execute(lua_State *L) {
       break;
     }
   case BC_GSET:   assert(0 && "NYI BYTECODE: GSET");
-  case BC_TGETV:  assert(0 && "NYI BYTECODE: TGETV");
+  case BC_TGETV:
+    /* TGETV: A = B[C] */
+    TRACE("TGETV");
+    {
+      TValue *o = BASE+B;
+      cTValue *res;
+      if (tvistab(o)) {
+        GCtab *tab = tabV(o);
+        res = lj_tab_get(L, tab, BASE+C);
+      } else {
+        res = lj_meta_tget(L, o, BASE+C);
+        assert(res != NULL && "NYI: lj_meta_tget unreachable");
+      }
+      if (res)
+        copyTV(L, BASE+A, res);
+      else
+        setnilV(BASE+A);
+      break;
+    }
   case BC_TGETS:
     TRACE("TGETS");
     {
