@@ -972,6 +972,11 @@ void execute(lua_State *L) {
           vm_return(L, BASE[-1].u64, 0, 1);
       }
       break;
+    case 0x6b:
+      TRACEFF("tostring");
+      /* XXX - punt to fallback. */
+      fff_fallback(L);
+      break;
     case 0x6c:
       TRACEFF("pcall");
       {
