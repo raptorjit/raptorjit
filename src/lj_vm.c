@@ -569,7 +569,25 @@ void execute(lua_State *L) {
       }
       break;
     }
-  case BC_TSETB:  assert(0 && "NYI BYTECODE: TSETB");
+  case BC_TSETB:
+    /* TSETB: B[C] = A where C is an unsigned literal. */
+    TRACE("TSETB");
+    {
+      TValue *o = BASE+B;
+      TValue key;
+      key.n = C;
+      if (tvistab(o)) {
+        GCtab *tab = tabV(o);
+        copyTV(L, lj_tab_set(L, tab, &key), BASE+A);
+        lj_gc_anybarriert(L, tab);
+      } else {
+        TValue *v = lj_meta_tset(L, o, &key);
+        assert(v != NULL && "NYI: TSETB __newindex");
+        /* NOBARRIER: lj_meta_tset ensures the table is not black. */
+        copyTV(L, v, BASE+A);
+      }
+    }
+    break;
   case BC_TSETM:
     TRACE("TSETM");
     {
