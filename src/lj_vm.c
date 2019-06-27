@@ -373,7 +373,14 @@ void execute(lua_State *L) {
     }
     break;
   case BC_MULVN:  assert(0 && "NYI BYTECODE: MULVN");
-  case BC_DIVVN:  assert(0 && "NYI BYTECODE: DIVVN");
+  case BC_DIVVN:
+    /* DIVVN: Divide B by number constant C and store the result in A. */
+    TRACE("DIVVN");
+    {
+      assert(tvisnum(BASE+B) && "NYI: DIVVN with meta method");
+      setnumV(BASE+A, numV(BASE+B) / numV(ktv(C)));
+    }
+    break;
   case BC_MODVN:  assert(0 && "NYI BYTECODE: MODVN");
   case BC_ADDNV:  assert(0 && "NYI BYTECODE: ADDNV");
   case BC_SUBNV:  assert(0 && "NYI BYTECODE: SUBNV");
