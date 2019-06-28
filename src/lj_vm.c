@@ -517,13 +517,12 @@ void execute(lua_State *L) {
     TRACE("TGETV");
     {
       TValue *o = BASE+B;
-      cTValue *res;
-      if (tvistab(o)) {
-        GCtab *tab = tabV(o);
-        res = lj_tab_get(L, tab, BASE+C);
-      } else {
+      cTValue *res = NULL;
+      if (tvistab(o))
+        res = lj_tab_get(L, tabV(o), BASE+C);
+      if (!res) {
         res = lj_meta_tget(L, o, BASE+C);
-        assert(res != NULL && "NYI: lj_meta_tget unreachable");
+        assert(res != NULL && "NYI: TGETV __index");
       }
       if (res)
         copyTV(L, BASE+A, res);
