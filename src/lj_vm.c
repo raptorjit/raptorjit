@@ -531,22 +531,20 @@ void execute(lua_State *L) {
       break;
     }
   case BC_TGETS:
+    /* TGETS: A = B[C] where C is a string constant. */
     TRACE("TGETS");
     {
       TValue *o = BASE+B;
-      cTValue *res;
+      cTValue *res = NULL;
       GCstr *key = kgcref(C, GCstr);
-      if (tvistab(o)) {
-        GCtab *tab = tabV(o);
-        res = lj_tab_getstr(tab, key);
-      } else {
+      if (tvistab(o))
+        res = lj_tab_getstr(tabV(o), key);
+      if (!res) {
         TValue tvkey;
         /* Convert key to tagged value. */
         setgcVraw(&tvkey, obj2gco(key), LJ_TSTR);
-        // XXX SAVE_L
-        // XXX SAVE_PC
         res = lj_meta_tget(L, o, &tvkey);
-        assert(res != NULL && "NYI: lj_meta_tget unreachable");
+        assert(res != NULL && "NYI: TGETS __index");
       }
       if (res)
         copyTV(L, BASE+A, res);
