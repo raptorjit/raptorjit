@@ -555,7 +555,27 @@ void execute(lua_State *L) {
         setnilV(BASE+A);
       break;
     }
-  case BC_TGETB:  assert(0 && "NYI BYTECODE: TGETB");
+  case BC_TGETB:
+    /* TGETB: A = B[C] where C is a byte literal. */
+    TRACE("TGETB");
+    {
+      TValue *o = BASE+B;
+      cTValue *res = NULL;
+      if (tvistab(o))
+        res = lj_tab_getint(tabV(o), C);
+      if (!res) {
+        TValue tvkey;
+        /* Convert key to tagged value. */
+        setnumV(&tvkey, C);
+        res = lj_meta_tget(L, o, &tvkey);
+        assert(res != NULL && "NYI: TGETB __index");
+      }
+      if (res)
+        copyTV(L, BASE+A, res);
+      else
+        setnilV(BASE+A);
+      break;
+    }
   case BC_TGETR:  assert(0 && "NYI BYTECODE: TGETR");
   case BC_TSETV:
     TRACE("TSETV");
