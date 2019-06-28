@@ -798,11 +798,15 @@ void execute(lua_State *L) {
       assert(tvisnum(idx)  && "NYI: non-number loop index");
       assert(tvisnum(stop) && "NYI: non-number loop stop");
       assert(tvisnum(step) && "NYI: non-number loop step");
-      setnumV(ext, idx->n);
       /* Check for termination */
-      if ((step->n >= 0 && idx->n >= stop->n) ||
-          (step->n <  0 && stop->n >= idx->n)) {
+      if ((step->n >= 0 && idx->n > stop->n) ||
+          (step->n <  0 && stop->n > idx->n)) {
         branchPC(D);
+      } else {
+        /* Copy loop index to stack. */
+        setnumV(ext, idx->n);
+        /* Increment loop index state. */
+        setnumV(idx, idx->n + step->n);
       }
     }
     break;
