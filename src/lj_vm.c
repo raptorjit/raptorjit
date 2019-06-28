@@ -802,7 +802,7 @@ void execute(lua_State *L) {
       /* Check for termination */
       if ((step->n >= 0 && idx->n >= stop->n) ||
           (step->n <  0 && stop->n >= idx->n)) {
-        pc += bc_j(D);
+        branchPC(D);
       }
     }
     break;
