@@ -1018,6 +1018,23 @@ void execute(lua_State *L) {
         PC = mref(funcV(f)->l.pc, BCIns);
       }
       break;
+    case 0x6d:
+      TRACEFF("xpcall");
+      if (tvisfunc(BASE+1)) {
+        TValue f = BASE[0];
+        TValue handler = BASE[1];
+        /* Swap function and handler. */
+        BASE[0] = handler;
+        BASE[1] = f;
+        /* Push xpcall frame. */
+        BASE += 3;
+        BASE[-1].u64 = 24 + FRAME_PCALL + (hook_active(G(L)) ? 1 : 0);
+        /* Call protected function. */
+        assert(tvisfunc(&f) && "NYI: xpcall to non-function");
+        PC = mref(funcV(&f)->l.pc, BCIns);
+      } else
+        fff_fallback(L);
+      break;
     case 0x96:
       TRACEFF("sub");
       {
