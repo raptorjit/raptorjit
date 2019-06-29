@@ -1260,6 +1260,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
 {
   int res;
   GCfunc *func;
+  const BCIns *oldpc = PC;
   /* Add new CFrame to the chain. */
   CFrame cf = { L->cframe, L, nres };
   //assert(nres >= 0 && "NYI: LUA_MULTRET");
@@ -1286,6 +1287,8 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   }
   /* Unlink C frame. */
   L->cframe = cf.previous;
+  /* Restore PC. */
+  PC = oldpc;
   /* XXX */
   return LUA_OK;
 }
