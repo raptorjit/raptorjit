@@ -295,8 +295,24 @@ void execute(lua_State *L) {
       if (flag) branchPC(D);
     }
     break;
-  case BC_ISEQP:  assert(0 && "NYI BYTECODE: ISEQP");
-  case BC_ISNEP:  assert(0 && "NYI BYTECODE: ISNEP");
+  case BC_ISEQP:
+    /* ISEQP: Take following JMP if A is equal to primtive D.*/
+    TRACE("ISEQP");
+  case BC_ISNEP:
+    /* ISNEP: Take following JMP unless A is equal to primtive D.*/
+    if (OP == BC_ISNEP)
+      TRACE("ISNEP");
+    {
+      int flag = (OP == BC_ISNEP); // Invert flag on ISNEP.
+      if (itype(BASE+A) == ~D)
+        /* If the types match than A is nil/false/true and equal to pri D. */
+        flag ^= 1;
+      else if (tviscdata(BASE+A))
+        assert(0 && "NYI: ISEQP/ISNEP on cdata.");
+      curins = *PC++;
+      if (flag) branchPC(D);
+    }
+    break;
   case BC_ISTC:
     /* ISTC: Copy D to A and take following JMP instruction if D is true. */
     TRACE("ISTC");
