@@ -228,22 +228,35 @@ void execute(lua_State *L) {
   insctr++;
   curins = *PC++;
   switch (OP) {
-  case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
-  case BC_ISGE:   assert(0 && "NYI BYTECODE: ISGE");
-  case BC_ISLE:   assert(0 && "NYI BYTECODE: ISLE");
+  case BC_ISLT:
+    /* ISLT: Take following JMP instruction if A < D. */
+    if (OP == BC_ISLT) TRACE("ISLT");
+  case BC_ISGE:
+    /* ISGE: Take following JMP instruction if A >= D. */
+    if (OP == BC_ISGE) TRACE("ISGE");
+  case BC_ISLE:
+    /* ISLE: Take following JMP instruction if A <= D. */
+    if (OP == BC_ISLE) TRACE("ISLE");
   case BC_ISGT:
     /* ISGT: Take following JMP instruction if A > D. */
-    TRACE("ISGT");
+    if (OP == BC_ISGT) TRACE("ISGT");
     {
       int flag;
       if (tvisnum(BASE+A) && tvisnum(BASE+D)) {
         /* Compare two floats. */
-        flag = (BASE+A)->n > (BASE+D)->n;
+        if (OP == BC_ISLT)
+          flag = (BASE+A)->n < (BASE+D)->n;
+        else if (OP == BC_ISGE)
+          flag = (BASE+A)->n >= (BASE+D)->n;
+        else if (OP == BC_ISLE)
+          flag = (BASE+A)->n <= (BASE+D)->n;
+        else if (OP == BC_ISGT)
+          flag = (BASE+A)->n > (BASE+D)->n;
       } else {
         /* Fall back to meta-comparison. */
         TValue *res = lj_meta_comp(L, BASE+A, BASE+D, OP);
         if ((intptr_t)res > 1)
-          assert(0 && "NYI: ISGT metamethod");
+          assert(0 && "NYI: lj_meta_comp metamethod");
         else
           flag = (intptr_t)res == 1;
       }
