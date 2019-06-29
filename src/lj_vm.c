@@ -817,26 +817,36 @@ void execute(lua_State *L) {
     break;
   case BC_FORL:
     TRACE("FORL");
-    break;        /* XXX hotloop */
+    {
+      TValue *state = BASE + A;
+      TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
+      /* Update loop index. */
+      setnumV(idx, idx->n + step->n);
+      /* Copy loop index to stack. */
+      setnumV(ext, idx->n);
+      /* Check for termination */
+      if ((step->n >= 0 && idx->n <= stop->n) ||
+          (step->n <  0 && stop->n <= idx->n))
+        branchPC(D);
+      /* XXX hotloop */
+    }
+    break;
   case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
   case BC_FORI:
     TRACE("FORI");
     {
       TValue *state = BASE + A;
       TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
+      /* Initialize loop parameters. */
       assert(tvisnum(idx)  && "NYI: non-number loop index");
       assert(tvisnum(stop) && "NYI: non-number loop stop");
       assert(tvisnum(step) && "NYI: non-number loop step");
+      /* Copy loop index to stack. */
+      setnumV(ext, idx->n);
       /* Check for termination */
       if ((step->n >= 0 && idx->n > stop->n) ||
-          (step->n <  0 && stop->n > idx->n)) {
+          (step->n <  0 && stop->n > idx->n))
         branchPC(D);
-      } else {
-        /* Copy loop index to stack. */
-        setnumV(ext, idx->n);
-        /* Increment loop index state. */
-        setnumV(idx, idx->n + step->n);
-      }
     }
     break;
   case BC_IFORL:  assert(0 && "NYI BYTECODE: IFORL");
