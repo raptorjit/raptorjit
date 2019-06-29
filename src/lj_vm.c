@@ -1160,12 +1160,13 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
        *
        * Decrement resultofs by one, and increment nresults by one.
        * Push TRUE for successful return from a pcall in front of results.
-       * (We know there is space because we freed two slots from the pcall
+       * (We know there is space because we freed >= two slots from the pcall
        * frame.)
        *
        * Return from call frame with the adjusted resultofs/nresults.
        */
-      BASE -= 2; resultofs += 2;
+      int delta = link>>3;
+      BASE -= delta; resultofs += delta;
       resultofs--; nresults++; setboolV(BASE+resultofs, 1);
       return vm_return(L, BASE[-1].u64, resultofs, nresults);
     }
