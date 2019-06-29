@@ -405,7 +405,15 @@ void execute(lua_State *L) {
   case BC_DIVNV:  assert(0 && "NYI BYTECODE: DIVNV");
   case BC_MODNV:  assert(0 && "NYI BYTECODE: MODNV");
   case BC_ADDVV:  assert(0 && "NYI BYTECODE: ADDVV");
-  case BC_SUBVV:  assert(0 && "NYI BYTECODE: SUBVV");
+  case BC_SUBVV:
+    /* SUBVV: Subtract C from B and store the result in A. */
+    TRACE("SUBVV");
+    {
+      assert(tvisnum(BASE+B) && "NYI: SUBVV with meta method");
+      assert(tvisnum(BASE+C) && "NYI: SUBVV with meta method");
+      setnumV(BASE+A, numV(BASE+B) - numV(BASE+C));
+    }
+    break;
   case BC_MULVV:  assert(0 && "NYI BYTECODE: MULVV");
   case BC_DIVVV:  assert(0 && "NYI BYTECODE: DIVVV");
   case BC_MODVV:  assert(0 && "NYI BYTECODE: MODVV");
