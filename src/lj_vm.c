@@ -21,9 +21,26 @@
 #include "lj_func.h"
 #include "lj_buf.h"
 
-#define TRACE(name) printf("%-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%ld\n", \
-                           name, A, B, C, D, TOP-BASE)
-#define TRACEFF(name) printf("ASMFF  OP=%-3x %-10s\n", OP, name)
+/* Count of executed instructions for debugger prosperity. */
+static uint64_t insctr;
+
+/* Offset for when to start tracing (as in "logging", this has nothing to do
+ * with the tracing JIT whatsoever) bytecode execution when debugging the
+ * interpreter.
+ *
+ * You can read the value of `insctr' at moments of interest from GDB and set
+ * this variable accordingly to log the executed bytecodes from that point
+ * onward.
+ */
+static uint64_t insctr_tracefrom = UINT64_MAX;
+
+#define TRACE(name)                                                     \
+  if (insctr >= insctr_tracefrom)                                       \
+    printf("%-6lu %-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%ld\n",   \
+           insctr, name, A, B, C, D, TOP-BASE)
+#define TRACEFF(name)                                           \
+  if (insctr >= insctr_tracefrom)                               \
+    printf("%-6lu ASMFF  OP=%-3x %-10s\n", insctr, OP, name)
 
 #define neg(n) (-1 - (n))
 #define max(a,b) ((a)>(b) ? (a) : (b))
@@ -208,6 +225,7 @@ static inline void branchPC(int offset)
 void execute(lua_State *L) {
   BCIns curins;
  execute:
+  insctr++;
   curins = *PC++;
   switch (OP) {
   case BC_ISLT:   assert(0 && "NYI BYTECODE: ISLT");
