@@ -243,15 +243,20 @@ void execute(lua_State *L) {
     {
       int flag;
       if (tvisnum(BASE+A) && tvisnum(BASE+D)) {
-        /* Compare two floats. */
+        double x = BASE[A].n, y = BASE[D].n;
+        /* Compare two floats.
+         *
+         * Note: to preserve NaN semantics GE/GT branch on unordered, but LT/LE
+         * don't.
+         */
         if (OP == BC_ISLT)
-          flag = (BASE+A)->n < (BASE+D)->n;
+          flag = x < y;
         else if (OP == BC_ISGE)
-          flag = (BASE+A)->n >= (BASE+D)->n;
+          flag = x >= y || isnan(x) || isnan(y);
         else if (OP == BC_ISLE)
-          flag = (BASE+A)->n <= (BASE+D)->n;
+          flag = x <= y;
         else if (OP == BC_ISGT)
-          flag = (BASE+A)->n > (BASE+D)->n;
+          flag = x > y || isnan(x) || isnan(y);
       } else {
         /* Fall back to meta-comparison. */
         TValue *res = lj_meta_comp(L, BASE+A, BASE+D, OP);
