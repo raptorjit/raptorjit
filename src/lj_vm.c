@@ -475,7 +475,11 @@ void execute(lua_State *L) {
     /* BASE[A] = D */
     setnumV(BASE+A, (int16_t) D); // D is a signed int16 literal.
     break;
-  case BC_KNUM:   assert(0 && "NYI BYTECODE: KNUM");
+  case BC_KNUM:
+    /* KNUM: Set slot A to number constant D. */
+    TRACE("KNUM");
+    setnumV(BASE+A, ktv(D)->n);
+    break;
   case BC_KPRI:
     TRACE("KPRI");
     setpriV(BASE+A, ~D); // D is 0/1/2 for nil/false/true.
