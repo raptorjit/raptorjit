@@ -480,7 +480,11 @@ void execute(lua_State *L) {
     TRACE("KPRI");
     setpriV(BASE+A, ~D); // D is 0/1/2 for nil/false/true.
     break;
-  case BC_KNIL:   assert(0 && "NYI BYTECODE: KNIL");
+  case BC_KNIL:
+    /* KNIL: Set slots A to D to nil. */
+    TRACE("KNIL");
+    copyTVs(L, BASE+A, NULL, 1+D - A, 0);
+    break;
   case BC_UGET:
     TRACE("UGET");
     {
