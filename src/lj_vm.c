@@ -1292,6 +1292,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   const BCIns *oldpc = PC;
   /* Add new CFrame to the chain. */
   CFrame cf = { L->cframe, L, nres };
+  setmref(cf.pc, cf.L); /* Safe default PC ref. */
   //assert(nres >= 0 && "NYI: LUA_MULTRET");
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
@@ -1341,6 +1342,7 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   int nresults = -savestack(L, L->top) / sizeof(TValue);
   /* Add to CFrame chain. */
   CFrame cf = { L->cframe, L, nresults };
+  setmref(cf.pc, cf.L); /* Safe default PC ref. */
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
