@@ -285,9 +285,12 @@ void execute(lua_State *L) {
       else if (itype(x) != itype(y))
         // Not the same type?
         flag = flag;
-      else if (itype(x) <= LJ_TISTABUD)
+      else if (itype(x) <= LJ_TISTABUD) {
         // Different tables or userdatas. Need to check __eq metamethod.
-        assert(0 && "NYI: ISEQV/ISNEV on tables/userdatas.");
+        TValue *res = lj_meta_equal(L, gcval(BASE+A), gcval(BASE+D), flag);
+        if ((intptr_t)res != flag)
+          assert(0 && "NYI: lj_meta_equal metamethod");
+      }
       curins = *PC++;
       if (flag) branchPC(D);
     }
