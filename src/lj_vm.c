@@ -385,7 +385,11 @@ void execute(lua_State *L) {
     /* MOV: A = dst; D = src */
     copyTV(L, BASE+A, BASE+D);
     break;
-  case BC_NOT:    assert(0 && "NYI BYTECODE: NOT");
+  case BC_NOT:
+    /* NOT: Set A to boolean not of D. */
+    TRACE("NOT");
+    setboolV(BASE+A, !tvistruecond(BASE+D));
+    break;
   case BC_UNM:    assert(0 && "NYI BYTECODE: UNM");
   case BC_LEN:
     /* LEN: Set A to #D (object length). */
