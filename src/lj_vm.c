@@ -905,9 +905,7 @@ void execute(lua_State *L) {
       TValue *state = BASE + A;
       TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
       /* Initialize loop parameters. */
-      assert(tvisnum(idx)  && "NYI: non-number loop index");
-      assert(tvisnum(stop) && "NYI: non-number loop stop");
-      assert(tvisnum(step) && "NYI: non-number loop step");
+      lj_meta_for(L, state);
       /* Copy loop index to stack. */
       setnumV(ext, idx->n);
       /* Check for termination */
