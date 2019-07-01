@@ -1405,7 +1405,8 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   func = funcV(newbase-2);
   PC = mref(func->l.pc, BCIns);
   /* Setup "catch" jump buffer for a protected call. */
-  if ((res = _setjmp(cf.jb)) == 0) {
+  res = _setjmp(cf.jb);
+  if (res <= 0) { /* -1 signals to continue from pcall, xpcall. */
     /* Try */
     execute(L);
   } else {
@@ -1464,8 +1465,7 @@ void lj_vm_unwind_ff(CFrame *cframe) {
   uint64_t link = BASE[-1].u64;
   setboolV(BASE-1, 0); /* Push FALSE for unsuccessful return from a pcall.  */
   vm_return(L, link, -1, 2);
-  execute(L);
-  exit(EXIT_FAILURE); /* Unreachable. */
+  longjmp(cframe->jb, -1);
 }
 void lj_vm_unwind_c_eh(void)                   { assert(0 && "NYI"); }
 void lj_vm_unwind_ff_eh(void)                  { assert(0 && "NYI"); }
