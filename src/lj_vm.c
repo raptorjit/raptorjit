@@ -420,54 +420,122 @@ void execute(lua_State *L) {
     /* ADDVN: Add number constant C to B and store the result in A. */
     TRACE("ADDVN");
     {
-      assert(tvisnum(BASE+B) && "NYI: ADDVN with meta method");
-      setnumV(BASE+A, numV(BASE+B) + numV(ktv(C)));
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
+      if (mbase) assert(0 && "NYI: meta method call");
     }
     break;
   case BC_SUBVN:
-    /* SUBVN: Subtract number constant C from  B and store the result in A. */
+    /* SUBVN: Subtract number constant C from B and store the result in A. */
     TRACE("SUBVN");
     {
-      assert(tvisnum(BASE+B) && "NYI: SUBVN with meta method");
-      setnumV(BASE+A, numV(BASE+B) - numV(ktv(C)));
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
+      if (mbase) assert(0 && "NYI: meta method call");
     }
     break;
-  case BC_MULVN:  assert(0 && "NYI BYTECODE: MULVN");
+  case BC_MULVN:
+    /* MULVN: Multiply B by number constant C and store the result in A. */
+    TRACE("MULVN");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
   case BC_DIVVN:
     /* DIVVN: Divide B by number constant C and store the result in A. */
     TRACE("DIVVN");
     {
-      assert(tvisnum(BASE+B) && "NYI: DIVVN with meta method");
-      setnumV(BASE+A, numV(BASE+B) / numV(ktv(C)));
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
+      if (mbase) assert(0 && "NYI: meta method call");
     }
     break;
-  case BC_MODVN:  assert(0 && "NYI BYTECODE: MODVN");
-  case BC_ADDNV:  assert(0 && "NYI BYTECODE: ADDNV");
-  case BC_SUBNV:  assert(0 && "NYI BYTECODE: SUBNV");
-  case BC_MULNV:  assert(0 && "NYI BYTECODE: MULNV");
-  case BC_DIVNV:  assert(0 && "NYI BYTECODE: DIVNV");
-  case BC_MODNV:  assert(0 && "NYI BYTECODE: MODNV");
+  case BC_MODVN:
+    /* MODVN: Calculate B modulo number constant C and store the result in A. */
+    TRACE("MODVN");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
+  case BC_ADDNV:
+    /* ADDNV: Add B to number constant C and store the result in A. */
+    TRACE("ADDNV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
+  case BC_SUBNV:
+    /* SUBNV: Subtract B from number constant C and store the result in A. */
+    TRACE("SUBNV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
+  case BC_MULNV:
+    /* MULNV: Multiply number constant C by B and store the result in A. */
+    TRACE("MULNV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
+  case BC_DIVNV:
+    /* DIVNV: Divide number constant C by B and store the result in A. */
+    TRACE("DIVNV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
+  case BC_MODNV:
+    /* MODNV: Calculate number constant C modulo B and store the result in A. */
+    TRACE("MODNV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
   case BC_ADDVV:
     /* ADDVV: Add C to B and store the result in A. */
     TRACE("ADDVV");
     {
-      assert(tvisnum(BASE+B) && "NYI: ADDVV with meta method");
-      assert(tvisnum(BASE+C) && "NYI: ADDVV with meta method");
-      setnumV(BASE+A, numV(BASE+B) + numV(BASE+C));
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
     }
     break;
   case BC_SUBVV:
     /* SUBVV: Subtract C from B and store the result in A. */
     TRACE("SUBVV");
     {
-      assert(tvisnum(BASE+B) && "NYI: SUBVV with meta method");
-      assert(tvisnum(BASE+C) && "NYI: SUBVV with meta method");
-      setnumV(BASE+A, numV(BASE+B) - numV(BASE+C));
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
     }
     break;
-  case BC_MULVV:  assert(0 && "NYI BYTECODE: MULVV");
-  case BC_DIVVV:  assert(0 && "NYI BYTECODE: DIVVV");
-  case BC_MODVV:  assert(0 && "NYI BYTECODE: MODVV");
+  case BC_MULVV:
+    /* MULVV: Multiply B by C and store the result in A. */
+    TRACE("MULVV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
+  case BC_DIVVV:
+    /* DIVVV: Divide B by C and store the result in A. */
+    TRACE("DIVVV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
+  case BC_MODVV:
+    /* MODVV: Calculate B modulo C and store the result in A. */
+    TRACE("MODVV");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
+      if (mbase) assert(0 && "NYI: meta method call");
+    }
+    break;
   case BC_POW:    assert(0 && "NYI BYTECODE: POW");
   case BC_CAT:
     TRACE("CAT");
