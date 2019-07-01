@@ -997,9 +997,12 @@ void execute(lua_State *L) {
   case BC_JITERL:
     if (OP == BC_JITERL) assert(0 && "NYI BYTECODE: JITERL");
     break;
-  case BC_LOOP:   assert(0 && "NYI BYTECODE: LOOP");
-  case BC_ILOOP:  assert(0 && "NYI BYTECODE: ILOOP");
-  case BC_JLOOP:  assert(0 && "NYI BYTECODE: JLOOP");
+  case BC_LOOP:
+  case BC_ILOOP:
+  case BC_JLOOP:
+    TRACE("*LOOP");
+    /* XXX hotloop */
+    break;
   case BC_JMP:
     TRACE("JMP");
     branchPC(D);
