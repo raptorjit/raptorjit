@@ -1190,6 +1190,22 @@ void execute(lua_State *L) {
       } else
         fff_fallback(L);
       break;
+    case 0x72:
+      TRACEFF("floor");
+      if (tvisnum(BASE)) {
+        setnumV(BASE, lj_vm_floor(numV(BASE)));
+        vm_return(L, BASE[-1].u64, 0, 1);
+      } else
+        fff_fallback(L);
+      break;
+    case 0x73:
+      TRACEFF("ceil");
+      if (tvisnum(BASE)) {
+        setnumV(BASE, lj_vm_ceil(numV(BASE)));
+        vm_return(L, BASE[-1].u64, -2, 1);
+      } else
+        fff_fallback(L);
+      break;
     case 0x96:
       TRACEFF("sub");
       {
