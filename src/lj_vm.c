@@ -1018,6 +1018,7 @@ void execute(lua_State *L) {
     TRACE("FUNCF");
     {
       GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+      TOP = BASE + pt->framesize;
       KBASE = mref(pt->k, void);
       /* Fill missing args with nil. */
       if (A > NARGS) copyTVs(L, BASE+NARGS, NULL, A-NARGS, 0);
