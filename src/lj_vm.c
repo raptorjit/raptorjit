@@ -48,6 +48,7 @@ static uint64_t insctr_tracefrom = UINT64_MAX;
 
 /* Forward declarations. */
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
+void vm_call_cont(lua_State *L, TValue *newbase, int nargs);
 void fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 
@@ -100,6 +101,10 @@ static int multres;
 static int nargs;
 static void *kbase;
 static const BCIns *pc;
+
+/* Places to store for lua_State and result passed to continuations. */
+static lua_State *cont_L;
+static int cont_delta;
 
 /* Program counter (PC) register stores the address of the next
  * instruction to run after the current instruction finishes.
@@ -422,7 +427,7 @@ void execute(lua_State *L) {
     TRACE("ADDVN");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_SUBVN:
@@ -430,7 +435,7 @@ void execute(lua_State *L) {
     TRACE("SUBVN");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_MULVN:
@@ -438,7 +443,7 @@ void execute(lua_State *L) {
     TRACE("MULVN");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_DIVVN:
@@ -446,7 +451,7 @@ void execute(lua_State *L) {
     TRACE("DIVVN");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_MODVN:
@@ -454,7 +459,7 @@ void execute(lua_State *L) {
     TRACE("MODVN");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_ADDNV:
@@ -462,7 +467,7 @@ void execute(lua_State *L) {
     TRACE("ADDNV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_SUBNV:
@@ -470,7 +475,7 @@ void execute(lua_State *L) {
     TRACE("SUBNV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_MULNV:
@@ -478,7 +483,7 @@ void execute(lua_State *L) {
     TRACE("MULNV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_DIVNV:
@@ -486,7 +491,7 @@ void execute(lua_State *L) {
     TRACE("DIVNV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_MODNV:
@@ -494,7 +499,7 @@ void execute(lua_State *L) {
     TRACE("MODNV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_ADDVV:
@@ -502,7 +507,7 @@ void execute(lua_State *L) {
     TRACE("ADDVV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_SUBVV:
@@ -510,7 +515,7 @@ void execute(lua_State *L) {
     TRACE("SUBVV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_MULVV:
@@ -518,7 +523,7 @@ void execute(lua_State *L) {
     TRACE("MULVV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_DIVVV:
@@ -526,7 +531,7 @@ void execute(lua_State *L) {
     TRACE("DIVVV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_MODVV:
@@ -534,7 +539,7 @@ void execute(lua_State *L) {
     TRACE("MODVV");
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
-      if (mbase) assert(0 && "NYI: meta method call");
+      if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
   case BC_POW:    assert(0 && "NYI BYTECODE: POW");
@@ -1432,9 +1437,46 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       return vm_return(L, BASE[-1].u64, resultofs, nresults);
     }
     break;
+  case FRAME_CONT:
+    /* Return from metamethod continuation frame: restore PC and caller frame,
+       save L and delta for continuation, and invoke continuation. */
+    {
+      GCproto *pt;
+      void (*cont)(void);
+      int delta = link>>3;
+      PC = mref(BASE[-3].u64, BCIns);
+      cont = contptr(BASE[-4].u64);
+      cont_L = L;
+      cont_delta = delta;
+      BASE -= delta;
+      pt = funcproto(funcV(BASE-2));
+      TOP = BASE + pt->framesize;
+      KBASE = mref(pt->k, void);
+      (*cont)();
+      return 0;
+    }
+    break;
   }
   assert(0 && "NYI: Unsupported case in vm_return");
   return 0;
+}
+
+
+/* -- Calling metamethod continuations ------------------------------------ */
+
+/* Push continuation frame and call metamethod at `newbase'.
+ * See vm_return for handling of FRAME_CONT.
+ */
+void vm_call_cont(lua_State *L, TValue *newbase, int nargs) {
+  TValue *f;
+  int delta = newbase - BASE;
+  NARGS = nargs;
+  BASE = newbase;
+  f = BASE-2;
+  assert(tvisfunc(f) && "NYI: CALL to non-function");
+  BASE[-1].u64 = (delta << 3) + FRAME_CONT;
+  BASE[-3].u64 = (intptr_t)PC;
+  PC = mref(funcV(f)->l.pc, BCIns);
 }
 
 
@@ -1633,7 +1675,14 @@ double lj_vm_trunc(double d) { assert(0 && "NYI"); }
 
 /* Continuations for metamethods. */
 void lj_cont_cat(void)	  { assert(0 && "NYI"); }
-void lj_cont_ra(void)	  { assert(0 && "NYI"); }
+
+void lj_cont_ra(void) {
+  /* Store result in A from invoking instruction. */
+  lua_State *L = cont_L;
+  BCIns curins = *(PC-1);
+  copyTV(L, BASE+A, BASE+cont_delta);
+}
+
 void lj_cont_nop(void)	  { assert(0 && "NYI"); }
 void lj_cont_condt(void)  { assert(0 && "NYI"); }
 void lj_cont_condf(void)  { assert(0 && "NYI"); }
