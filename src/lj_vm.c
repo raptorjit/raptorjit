@@ -1395,6 +1395,7 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
     }
     break;
   case FRAME_LUA:
+    /* Return from a Lua function. */
     PC = (BCIns*)link;
     {
       /* Find details in caller's CALL instruction operands. */
@@ -1423,6 +1424,8 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
   switch (link & FRAME_TYPEP) {
   case FRAME_PCALL:
   case FRAME_PCALLH:
+    /* Return from protected call: signal success to caller.
+       (See lj_unwind_ff for unwinding from failed pcalls.) */
     {
       /* Pop pcall frame, and adjust resultofs accordingly.
        *
