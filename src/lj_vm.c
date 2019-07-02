@@ -840,15 +840,16 @@ void execute(lua_State *L) {
     {
       MULTRES = NARGS;
       TValue *callbase = BASE + A+2;
-      TValue *f = callbase-2;
-      assert(tvisfunc(f) && "NYI: CALLT to non-function");
-      assert((BASE[-1].u64 & FRAME_TYPE) == FRAME_LUA
+      TValue f = callbase[-2];
+      assert(tvisfunc(&f) && "NYI: CALLT to non-function");
+      assert(((BASE[-1].u64 & FRAME_TYPE) == FRAME_LUA
+              || (BASE[-1].u64 & FRAME_TYPEP) != FRAME_VARG)
              && "NYI: CALLT from vararg function");
       // Copy function and arguments down into parent frame.
-      BASE[-2] = *f;
+      BASE[-2] = f;
       copyTVs(L, BASE, callbase, NARGS, NARGS);
-      assert(funcV(f)->l.ffid <= FF_C && "NYI: CALLT to ASM fast function");
-      PC = mref(funcV(f)->l.pc, BCIns);
+      assert(funcV(&f)->l.ffid <= FF_C && "NYI: CALLT to ASM fast function");
+      PC = mref(funcV(&f)->l.pc, BCIns);
     }
     break;
   case BC_ITERC:
