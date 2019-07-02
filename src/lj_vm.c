@@ -787,10 +787,10 @@ void execute(lua_State *L) {
       GCtab *tab = tabV(o);
       if (isblack((GCobj*)tab))
         lj_gc_barrierback(G(L), tab);
-      if (tab->asize < ix+NARGS)
-        lj_tab_reasize(L, tab, ix + NARGS);
-      for (i = 0; i < NARGS; i++)
-        copyTV(L, BASE+A+i, BASE+D+i);
+      if (tab->asize < ix+MULTRES)
+        lj_tab_reasize(L, tab, ix + MULTRES);
+      for (i = 0; i < MULTRES; i++)
+        *arrayslot(tab, ix+i) = BASE[A+i];
     }
     break;
   case BC_TSETR:  assert(0 && "NYI BYTECODE: TSETR");
