@@ -913,8 +913,8 @@ void execute(lua_State *L) {
     TRACE("VARG");
     {
       int delta = BASE[-1].u64 >> 3;
-      MULTRES = delta;
-      copyTVs(L, BASE+A, BASE-2-delta+C, B>0 ? B : MULTRES, MULTRES);
+      MULTRES = max(delta-2-(int)C, 0);
+      copyTVs(L, BASE+A, BASE-delta+C, B>0 ? B-1 : MULTRES, MULTRES);
     }
     break;
   case BC_ISNEXT:
