@@ -803,12 +803,11 @@ void execute(lua_State *L) {
       int i = 0, ix = ktv(D)->u32.lo;
       TValue *o = BASE+A-1;
       GCtab *tab = tabV(o);
-      if (isblack((GCobj*)tab))
-        lj_gc_barrierback(G(L), tab);
       if (tab->asize < ix+MULTRES)
         lj_tab_reasize(L, tab, ix + MULTRES);
       for (i = 0; i < MULTRES; i++)
         *arrayslot(tab, ix+i) = BASE[A+i];
+      lj_gc_anybarriert(L, tab);
     }
     break;
   case BC_TSETR:  assert(0 && "NYI BYTECODE: TSETR");
