@@ -103,7 +103,8 @@ static int nargs;
 static void *kbase;
 static const BCIns *pc;
 static lua_State *cont_L;
-static TValue *cont_res;
+static TValue *cont_base;
+ptrdiff_t cont_ofs;
 
 /* Program counter (PC) register stores the address of the next
  * instruction to run after the current instruction finishes.
@@ -187,13 +188,17 @@ static TValue *cont_res;
 #define C  bc_c(curins)
 #define D  bc_d(curins)
 
-/* Registers CONT_L and CONT_RES are set when returning from metamethod
- * continuation frames (FRAME_CONT case in vm_return) and used by metamethod
- * continuations (lj_cont_*). CONT_L is the active lua_State and CONT_RES
- * points to the results of the continuation (if any).
+/* Registers CONT_L, CONT_BASE, and CONT_OFS are set when returning from
+ * metamethod continuation frames (FRAME_CONT case in vm_return) and used by
+ * metamethod continuations (lj_cont_*). CONT_L is the active lua_State and
+ * CONT_BASE is the stack base of the continuation.
+ *
+ * The results (if any) of the continuation start at CONT_BASE+CONT_OFS. The
+ * MULTRES register is used to pass the number of available results.
  */
 #define CONT_L cont_L
-#define CONT_RES cont_res
+#define CONT_BASE cont_base
+#define CONT_OFS cont_ofs
 
 
 /* -- Utility functions --------------------------------------------------- */
@@ -1503,13 +1508,19 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
     /* Return from metamethod continuation frame: restore PC and caller frame,
        save L and delta for continuation, and invoke continuation. */
     {
+      /* Note the FRAME_CONT layout:
+       *                                           CONT_BASE
+       *      -4       -3         -2         -1         0       1
+       *  | <cont> |  <pc>  |<metamethod>| <link> | <arg1> |   ...
+       */
       GCproto *pt;
       void (*cont)(void);
       int delta = link>>3;
       PC = mref(BASE[-3].u64, BCIns);
       cont = contptr(BASE[-4].u64);
       CONT_L = L;
-      CONT_RES = BASE + resultofs;
+      CONT_BASE = BASE;
+      CONT_OFS = resultofs;
       MULTRES = nresults;
       BASE -= delta;
       pt = funcproto(funcV(BASE-2));
@@ -1741,7 +1752,7 @@ void lj_cont_ra(void) {
   /* Store result in A from invoking instruction. */
   lua_State *L = CONT_L;
   BCIns curins = *(PC-1);
-  copyTVs(L, BASE+A, CONT_RES, 1, MULTRES);
+  copyTVs(L, BASE+A, CONT_BASE+CONT_OFS, 1, MULTRES);
 }
 
 void lj_cont_nop(void)	  { assert(0 && "NYI"); }
