@@ -48,7 +48,7 @@ static uint64_t insctr_tracefrom = UINT64_MAX;
 
 /* Forward declarations. */
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
-void vm_call_cont(lua_State *L, TValue *newbase, int nargs);
+void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 void fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 
@@ -104,7 +104,7 @@ static const BCIns *pc;
 
 /* Places to store for lua_State and result passed to continuations. */
 static lua_State *cont_L;
-static int cont_delta;
+static TValue *cont_res;
 
 /* Program counter (PC) register stores the address of the next
  * instruction to run after the current instruction finishes.
@@ -1465,7 +1465,8 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       PC = mref(BASE[-3].u64, BCIns);
       cont = contptr(BASE[-4].u64);
       cont_L = L;
-      cont_delta = delta;
+      cont_res = BASE + resultofs;
+      MULTRES = nresults;
       BASE -= delta;
       pt = funcproto(funcV(BASE-2));
       TOP = BASE + pt->framesize;
@@ -1485,10 +1486,10 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
 /* Push continuation frame and call metamethod at `newbase'.
  * See vm_return for handling of FRAME_CONT.
  */
-void vm_call_cont(lua_State *L, TValue *newbase, int nargs) {
+void vm_call_cont(lua_State *L, TValue *newbase, int _nargs) {
   TValue *f;
   int delta = newbase - BASE;
-  NARGS = nargs;
+  NARGS = _nargs;
   BASE = newbase;
   f = BASE-2;
   assert(tvisfunc(f) && "NYI: CALL to non-function");
@@ -1698,7 +1699,7 @@ void lj_cont_ra(void) {
   /* Store result in A from invoking instruction. */
   lua_State *L = cont_L;
   BCIns curins = *(PC-1);
-  copyTV(L, BASE+A, BASE+cont_delta);
+  copyTVs(L, BASE+A, cont_res, 1, MULTRES);
 }
 
 void lj_cont_nop(void)	  { assert(0 && "NYI"); }
