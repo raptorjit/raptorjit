@@ -693,7 +693,7 @@ void execute(lua_State *L) {
       cTValue *res = NULL;
       if (tvistab(o))
         res = lj_tab_get(L, tabV(o), BASE+C);
-      if (!res) {
+      if (tvisnil(res)) {
         res = lj_meta_tget(L, o, BASE+C);
         assert(res != NULL && "NYI: TGETV __index");
       }
