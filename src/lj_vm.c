@@ -542,7 +542,14 @@ void execute(lua_State *L) {
       if (mbase) vm_call_cont(L, mbase, 2);
     }
     break;
-  case BC_POW:    assert(0 && "NYI BYTECODE: POW");
+  case BC_POW:
+    /* POW: Calculate power C of B and store the result in A. */
+    TRACE("POW");
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
+      if (mbase) vm_call_cont(L, mbase, 2);
+    }
+    break;
   case BC_CAT:
     TRACE("CAT");
     {
