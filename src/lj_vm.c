@@ -571,9 +571,9 @@ void execute(lua_State *L) {
   case BC_CAT:
     TRACE("CAT");
     {
-      TValue *res = lj_meta_cat(L, BASE + C, C-B);
-      assert(res == NULL && "NYI: CAT metamethod");
-      copyTV(L, BASE+A, BASE+B);
+      TValue *mbase = lj_meta_cat(L, BASE+C, C-B);
+      if (mbase) vm_call_cont(L, mbase, 2);
+      else copyTV(L, BASE+A, BASE+B);
     }
     break;
   case BC_KSTR:
@@ -1746,7 +1746,22 @@ void lj_vm_powi_sse(void)    { assert(0 && "NYI"); }
 double lj_vm_trunc(double d) { assert(0 && "NYI"); }
 
 /* Continuations for metamethods. */
-void lj_cont_cat(void)	  { assert(0 && "NYI"); }
+void lj_cont_cat(void) {
+  /* Continue with concatenation. */
+  lua_State *L = CONT_L;
+  BCIns curins = *(PC-1);
+  int left = (CONT_BASE-4) - (BASE+B);
+  if (left > 0) {
+    /* CAT has remaining arguments, concatenate. */
+    copyTVs(L, CONT_BASE-4, CONT_BASE+CONT_OFS, 1, MULTRES);
+    TValue *mbase = lj_meta_cat(L, CONT_BASE-4, left);
+    if (mbase) vm_call_cont(L, mbase, 2);
+    else copyTV(L, BASE+A, BASE+B);
+  } else {
+    /* CAT is complete, store result. */
+    lj_cont_ra();
+  }
+}
 
 void lj_cont_ra(void) {
   /* Store result in A from invoking instruction. */
