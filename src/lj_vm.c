@@ -1378,7 +1378,11 @@ static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp) 
   BASE = callbase;
   NARGS = _nargs;
   f = BASE-2;
-  assert(tvisfunc(f) && "NYI: CALL to non-function");
+  if (!tvisfunc(f)) {
+    lj_meta_call(L, f, BASE + NARGS);
+    NARGS += 1;
+    assert(KBASE != BASE && "NYI: vm_call __call in tailcall.");
+  }
   BASE[-1].u64 = (ftp == FRAME_LUA) ? (intptr_t)PC : (delta << 3) + ftp;
   PC = mref(funcV(f)->l.pc, BCIns);
 }
