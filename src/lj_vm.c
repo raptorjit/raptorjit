@@ -1323,6 +1323,14 @@ void execute(lua_State *L) {
       } else
         fff_fallback(L);
       break;
+    case 0x89:
+      TRACEFF("tobit");
+      if (tvisnum(BASE)) {
+        BASE->u64 += 0x4338000000000000; // sseconst_tobit
+        vm_return(L, BASE[-1].u64, 0, 1);
+      } else
+        fff_fallback(L);
+      break;
     case 0x96:
       TRACEFF("sub");
       {
