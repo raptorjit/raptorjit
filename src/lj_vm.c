@@ -695,7 +695,7 @@ void execute(lua_State *L) {
         res = lj_tab_get(L, tabV(o), BASE+C);
       if (tvisnil(res)) {
         res = lj_meta_tget(L, o, BASE+C);
-        assert(res != NULL && "NYI: TGETV __index");
+        if (!res) vm_call_cont(L, TOP, 2);
       }
       if (res)
         copyTV(L, BASE+A, res);
@@ -717,7 +717,7 @@ void execute(lua_State *L) {
         /* Convert key to tagged value. */
         setgcVraw(&tvkey, obj2gco(key), LJ_TSTR);
         res = lj_meta_tget(L, o, &tvkey);
-        assert(res != NULL && "NYI: TGETS __index");
+        if (!res) vm_call_cont(L, TOP, 2);
       }
       if (res)
         copyTV(L, BASE+A, res);
@@ -738,7 +738,7 @@ void execute(lua_State *L) {
         /* Convert key to tagged value. */
         setnumV(&tvkey, C);
         res = lj_meta_tget(L, o, &tvkey);
-        assert(res != NULL && "NYI: TGETB __index");
+        if (!res) vm_call_cont(L, TOP, 2);
       }
       if (res)
         copyTV(L, BASE+A, res);
