@@ -680,8 +680,10 @@ void execute(lua_State *L) {
       GCtab *env = tabref(fn->l.env);
       GCstr *key = kgcref(D, GCstr);
       cTValue *tv = lj_tab_getstr(env, key);
-      assert(tv && !tvisnil(tv));
-      copyTV(L, BASE+A, tv);
+      if (tv)
+        copyTV(L, BASE+A, tv);
+      else
+        setnilV(BASE+A);
       break;
     }
   case BC_GSET:
