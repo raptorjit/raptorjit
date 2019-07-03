@@ -1621,6 +1621,8 @@ int lj_vm_pcall(lua_State *L, TValue *newbase, int nres, ptrdiff_t ef)  {
 /* Call a C function with a protected (error-handling) stack frame. */
 int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) { 
   int res;
+  const BCIns *oldpc = PC;
+  TValue *newbase = NULL;
   /* "Neg. delta means cframe w/o frame." */
   int nresults = -savestack(L, L->top) / sizeof(TValue);
   /* Add to CFrame chain. */
@@ -1629,18 +1631,27 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
-  if ((res = _setjmp(cf.jb)) == 0) {
-    /* Try */
-    TValue *newbase = cp(L, f, ud);
-    if (newbase)
-      res = luacall(L, 0, newbase, nresults, 0);
-  } else {
+  /* Setup "catch" jump buffer for a protected call. */
+  res = _setjmp(cf.jb);
+  /* Try */
+  if (res <= 0) /* -1 signals to continue from pcall, xpcall. */
+    switch (res) {
+    case 0:
+      newbase = cp(L, f, ud);
+      L->status = LUA_OK;
+      if (!newbase) break;
+      vm_call(L, newbase, L->top - newbase, FRAME_CP);
+    default:
+      execute(L);
+    }
+  else
     /* Catch */
-    assert(0 && "NYI cpcall error");
-  }
+    L->status = res;
   /* Unlink C frame. */
   L->cframe = cf.previous;
-  return res;
+  /* Restore PC. */
+  PC = oldpc;
+  return L->status;
 }
 
 /* Resume coroutine, see ASM fast function resume. */
