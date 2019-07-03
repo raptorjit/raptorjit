@@ -404,7 +404,13 @@ void execute(lua_State *L) {
     TRACE("NOT");
     setboolV(BASE+A, !tvistruecond(BASE+D));
     break;
-  case BC_UNM:    assert(0 && "NYI BYTECODE: UNM");
+  case BC_UNM:
+    /* UNM: Set A to -D (unary minus). */
+    {
+      TValue *mbase = lj_meta_arith(L, BASE+A, BASE+D, BASE+D, OP);
+      if (mbase) vm_call_cont(L, mbase, 2);
+    }
+    break;
   case BC_LEN:
     /* LEN: Set A to #D (object length). */
     TRACE("LEN");
