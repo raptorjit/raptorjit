@@ -278,9 +278,10 @@ void execute(lua_State *L) {
       } else {
         /* Fall back to meta-comparison. */
         TValue *res = lj_meta_comp(L, BASE+A, BASE+D, OP);
-        if ((intptr_t)res > 1)
-          assert(0 && "NYI: lj_meta_comp metamethod");
-        else
+        if ((intptr_t)res > 1) {
+          vm_call_cont(L, res, 2);
+          break; /* Do not clobber PC! */
+        } else
           flag = (intptr_t)res == 1;
       }
       /* Advance to jump instruction. */
@@ -311,8 +312,10 @@ void execute(lua_State *L) {
       else if (itype(x) <= LJ_TISTABUD) {
         // Different tables or userdatas. Need to check __eq metamethod.
         TValue *res = lj_meta_equal(L, gcval(BASE+A), gcval(BASE+D), flag);
-        if ((intptr_t)res != flag)
-          assert(0 && "NYI: lj_meta_equal metamethod");
+        if ((intptr_t)res != flag) {
+          vm_call_cont(L, res, 2);
+          break; /* Do not clobber PC! */
+        }
       }
       curins = *PC++;
       if (flag) branchPC(D);
@@ -1771,8 +1774,21 @@ void lj_cont_ra(void) {
 }
 
 void lj_cont_nop(void)	  { assert(0 && "NYI"); }
-void lj_cont_condt(void)  { assert(0 && "NYI"); }
-void lj_cont_condf(void)  { assert(0 && "NYI"); }
+
+void lj_cont_condt(void) {
+  /* Branch if result is true. */
+  int flag = MULTRES && tvistruecond(CONT_BASE+CONT_OFS);
+  BCIns curins = *PC++;
+  if (flag) branchPC(D);
+}
+
+void lj_cont_condf(void)  {
+/* Branch if result is false. */
+  int flag = !(MULTRES && tvistruecond(CONT_BASE+CONT_OFS));
+  BCIns curins = *PC++;
+  if (flag) branchPC(D);
+}
+
 void lj_cont_hook(void)	  { assert(0 && "NYI"); }
 void lj_cont_stitch(void) { assert(0 && "NYI"); }
 
