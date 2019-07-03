@@ -684,7 +684,16 @@ void execute(lua_State *L) {
       copyTV(L, BASE+A, tv);
       break;
     }
-  case BC_GSET:   assert(0 && "NYI BYTECODE: GSET");
+  case BC_GSET:
+    TRACE("GSET");
+    {
+      GCfunc *fn = funcV(BASE-2);
+      GCtab *env = tabref(fn->l.env);
+      GCstr *key = kgcref(D, GCstr);
+      copyTV(L, lj_tab_setstr(L, env, key), BASE+A);
+      lj_gc_anybarriert(L, env);
+      break;
+    }
   case BC_TGETV:
     /* TGETV: A = B[C] */
     TRACE("TGETV");
