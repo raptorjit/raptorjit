@@ -1170,6 +1170,15 @@ void execute(lua_State *L) {
           vm_return(L, BASE[-1].u64, 0, 1);
       }
       break;
+    case 0x69:
+      TRACEFF("rawget");
+      if (!tvistab(BASE))
+        fff_fallback(L);
+      else {
+        copyTV(L, BASE, lj_tab_get(L, tabV(BASE), BASE+1));
+        vm_return(L, BASE[-1].u64, 0, 1);
+      }
+      break;
     case 0x6b:
       TRACEFF("tostring");
       /* XXX - punt to fallback. */
