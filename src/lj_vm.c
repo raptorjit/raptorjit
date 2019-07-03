@@ -101,8 +101,6 @@ static int multres;
 static int nargs;
 static void *kbase;
 static const BCIns *pc;
-
-/* Places to store for lua_State and result passed to continuations. */
 static lua_State *cont_L;
 static TValue *cont_res;
 
@@ -187,6 +185,14 @@ static TValue *cont_res;
 #define B  bc_b(curins)
 #define C  bc_c(curins)
 #define D  bc_d(curins)
+
+/* Registers CONT_L and CONT_RES are set when returning from metamethod
+ * continuation frames (FRAME_CONT case in vm_return) and used by metamethod
+ * continuations (lj_cont_*). CONT_L is the active lua_State and CONT_RES
+ * points to the results of the continuation (if any).
+ */
+#define CONT_L cont_L
+#define CONT_RES cont_res
 
 
 /* -- Utility functions --------------------------------------------------- */
@@ -1463,8 +1469,8 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       int delta = link>>3;
       PC = mref(BASE[-3].u64, BCIns);
       cont = contptr(BASE[-4].u64);
-      cont_L = L;
-      cont_res = BASE + resultofs;
+      CONT_L = L;
+      CONT_RES = BASE + resultofs;
       MULTRES = nresults;
       BASE -= delta;
       pt = funcproto(funcV(BASE-2));
@@ -1696,9 +1702,9 @@ void lj_cont_cat(void)	  { assert(0 && "NYI"); }
 
 void lj_cont_ra(void) {
   /* Store result in A from invoking instruction. */
-  lua_State *L = cont_L;
+  lua_State *L = CONT_L;
   BCIns curins = *(PC-1);
-  copyTVs(L, BASE+A, cont_res, 1, MULTRES);
+  copyTVs(L, BASE+A, CONT_RES, 1, MULTRES);
 }
 
 void lj_cont_nop(void)	  { assert(0 && "NYI"); }
