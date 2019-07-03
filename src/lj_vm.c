@@ -47,8 +47,9 @@ static uint64_t insctr_tracefrom = UINT64_MAX;
 #define min(a,b) ((a)<(b) ? (a) : (b))
 
 /* Forward declarations. */
+static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp);
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
-void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
+static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 void fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 
@@ -828,11 +829,6 @@ void execute(lua_State *L) {
       NARGS = C-1;
     }
     {
-      TValue *f;
-      /* Setup new base for callee frame. */
-      BASE += 2 + A;
-      f = BASE-2;
-      assert(tvisfunc(f) && "NYI: CALL to non-function");
       /* Notes:
        *
        * PC is 32-bit aligned and so the low bits are always 00 which
@@ -841,8 +837,7 @@ void execute(lua_State *L) {
        * CALL does not have to record the number of expected results
        * in the frame data. The callee's RET bytecode will locate this
        * CALL and read the value from the B operand. */
-      BASE[-1].u64 = (intptr_t)PC;
-      PC = mref(funcV(f)->l.pc, BCIns);
+      vm_call(L, BASE+2+A, NARGS, FRAME_LUA);
     }
     break;
   case BC_CALLMT: case BC_CALLT:
@@ -857,17 +852,19 @@ void execute(lua_State *L) {
     }
     {
       MULTRES = NARGS;
-      TValue *callbase = BASE + A+2;
-      TValue f = callbase[-2];
-      assert(tvisfunc(&f) && "NYI: CALLT to non-function");
+      TValue *callbase = BASE+2+A;
+      intptr_t link = BASE[-1].u64;
+      // Copy function and arguments down into parent frame.
+      BASE[-2] = callbase[-2];
+      copyTVs(L, BASE, callbase, NARGS, NARGS);
       assert(((BASE[-1].u64 & FRAME_TYPE) == FRAME_LUA
               || (BASE[-1].u64 & FRAME_TYPEP) != FRAME_VARG)
              && "NYI: CALLT from vararg function");
-      // Copy function and arguments down into parent frame.
-      BASE[-2] = f;
-      copyTVs(L, BASE, callbase, NARGS, NARGS);
-      assert(funcV(&f)->l.ffid <= FF_C && "NYI: CALLT to ASM fast function");
-      PC = mref(funcV(&f)->l.pc, BCIns);
+      assert(funcV(BASE-2)->l.ffid <= FF_C
+             && "NYI: CALLT to ASM fast function");
+      vm_call(L, BASE, NARGS, FRAME_LUA);
+      /* Replace frame link set by vm_call with parent link. */
+      BASE[-1].u64 = link;
     }
     break;
   case BC_ITERC:
@@ -877,16 +874,7 @@ void execute(lua_State *L) {
       fb[0] = fb[-4]; // Copy state.
       fb[1] = fb[-3]; // Copy control var.
       fb[-2] = fb[-5]; // Copy callable.
-      NARGS = 2; // Handle like a regular 2-arg call.
-      TValue *f = fb-2;
-      if (!tvisfunc(f)) {
-        lj_meta_call(L, f, fb+NARGS);
-        NARGS += 1;
-        assert(BASE != KBASE && "NYI: ITERC tail call");
-      }
-      BASE = fb;
-      BASE[-1].u64 = (intptr_t)PC;
-      PC = mref(funcV(f)->l.pc, BCIns);
+      vm_call(L, fb, 2, FRAME_LUA);
     }
     break;
   case BC_ITERN:
@@ -1190,32 +1178,26 @@ void execute(lua_State *L) {
     case 0x6c:
       TRACEFF("pcall");
       {
-        /* First argument is the function to call, consume it. */
-        TValue *f = BASE;
+        /* First argument (BASE) is the function to call. */
+        TValue *callbase = BASE+2;
+        int hookflag = hook_active(G(L)) ? 1 : 0;
         NARGS -= 1;
-        /* Push pcall frame. */
-        BASE += 2;
-        copyTVs(L, BASE, BASE-1, NARGS, NARGS); /* Copy function arguments. */
-        BASE[-1].u64 = 16 + FRAME_PCALL + (hook_active(G(L)) ? 1 : 0);
-        /* Call protected function. */
-        assert(tvisfunc(f) && "NYI: pcall to non-function");
-        PC = mref(funcV(f)->l.pc, BCIns);
+        /* Copy remaining function arguments. */
+        copyTVs(L, callbase, callbase-1, NARGS, NARGS);
+        vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
       }
       break;
     case 0x6d:
       TRACEFF("xpcall");
+      /* First argument (BASE) is the function to call, second argument
+         (BASE+1) is the handler. */
       if (tvisfunc(BASE+1)) {
-        TValue f = BASE[0];
-        TValue handler = BASE[1];
+        TValue f;
+        TValue *callbase = BASE+3;
+        int hookflag = hook_active(G(L)) ? 1 : 0;
         /* Swap function and handler. */
-        BASE[0] = handler;
-        BASE[1] = f;
-        /* Push xpcall frame. */
-        BASE += 3;
-        BASE[-1].u64 = 24 + FRAME_PCALL + (hook_active(G(L)) ? 1 : 0);
-        /* Call protected function. */
-        assert(tvisfunc(&f) && "NYI: xpcall to non-function");
-        PC = mref(funcV(&f)->l.pc, BCIns);
+        f = BASE[0]; BASE[0] = BASE[1]; BASE[1] = f;
+        vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
       } else
         fff_fallback(L);
       break;
@@ -1377,6 +1359,31 @@ void execute(lua_State *L) {
 }
 
 
+/* -- Call handling ------------------------------------------------------- */
+
+/* Call Lua function or callable object.
+ *
+ * Setup new BASE for callee frame, set NARGS, and construct frame link
+ * according to frame type. Set PC to beginning of function or __call
+ * metamethod. In the latter case, the "function" is inserted as the first
+ * argument.
+ *
+ * Note: when the frame type (`ftp') is FRAME_LUA then the current PC is used
+ * as the return bytecode. For other frame types a delta link is computed based
+ * on the offset between BASE and `callbase'.
+ */
+static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp) {
+  TValue *f;
+  int delta = callbase - BASE;
+  BASE = callbase;
+  NARGS = _nargs;
+  f = BASE-2;
+  assert(tvisfunc(f) && "NYI: CALL to non-function");
+  BASE[-1].u64 = (ftp == FRAME_LUA) ? (intptr_t)PC : (delta << 3) + ftp;
+  PC = mref(funcV(f)->l.pc, BCIns);
+}
+
+
 /* -- Return handling ----------------------------------------------------- */
 
 /* Return to the previous frame.
@@ -1491,16 +1498,9 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
 /* Push continuation frame and call metamethod at `newbase'.
  * See vm_return for handling of FRAME_CONT.
  */
-void vm_call_cont(lua_State *L, TValue *newbase, int _nargs) {
-  TValue *f;
-  int delta = newbase - BASE;
-  NARGS = _nargs;
-  BASE = newbase;
-  f = BASE-2;
-  assert(tvisfunc(f) && "NYI: CALL to non-function");
-  BASE[-1].u64 = (delta << 3) + FRAME_CONT;
-  BASE[-3].u64 = (intptr_t)PC;
-  PC = mref(funcV(f)->l.pc, BCIns);
+static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs) {
+  newbase[-3].u64 = (intptr_t)PC;
+  vm_call(L, newbase, _nargs, FRAME_CONT);
 }
 
 
@@ -1624,13 +1624,7 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   STATE = ~LJ_VMST_INTERP;
   if (L->status == LUA_OK) {
     /* Initial resume (like a call). */
-    int delta = newbase - BASE;
-    BASE = newbase;
-    NARGS = delta-2;
-    TValue *f = BASE-2;
-    assert(tvisfunc(f) && "NYI: CALL to non-function");
-    BASE[-1].u64 = FRAME_CP + (delta << 3);
-    PC = mref(funcV(f)->l.pc, BCIns);
+    vm_call(L, newbase, newbase-BASE-2, FRAME_CP);
   } else {
     /* Resume after yield (like a return). */
     L->status = LUA_OK;
