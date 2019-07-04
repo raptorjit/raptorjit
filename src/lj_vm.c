@@ -438,15 +438,13 @@ void execute(lua_State *L) {
     {
       TValue *dst = BASE+A;
       TValue *o = BASE+D;
-      if (tvisstr(o)) {
+      if (tvisstr(o))
         setnumV(dst, strV(o)->len);
-      } else if (tvistab(o)) {
-        GCtab *t = tabV(o);
-        assert(!t->metatable && "NYI: LEN on meta table");
-        setnumV(dst, lj_tab_len(t));
-      } else {
-        assert(0 && "NYI: LEN on cdata");
-      }
+      else if (tvistab(o))
+        /* Lua 5.1 does not supprt __len on tables. */
+        setnumV(dst, lj_tab_len(tabV(o)));
+      else
+        vm_call_cont(L, lj_meta_len(L, o), 1);
     }
     break;
   case BC_ADDVN:
