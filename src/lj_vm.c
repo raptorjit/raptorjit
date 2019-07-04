@@ -773,16 +773,12 @@ void execute(lua_State *L) {
   case BC_TSETV:
     TRACE("TSETV");
     {
-      TValue *o = BASE+B;
-      if (tvistab(o)) {
-        GCtab *tab = tabV(o);
-        copyTV(L, lj_tab_set(L, tab, BASE+C), BASE+A);
-        lj_gc_anybarriert(L, tab);
-      } else {
-        TValue *v = lj_meta_tset(L, o, BASE+C);
-        assert(v != NULL && "NYI: TSETV __newindex");
-        /* NOBARRIER: lj_meta_tset ensures the table is not black. */
+      TValue *v = lj_meta_tset(L, BASE+B, BASE+C);
+      if (v) {
         copyTV(L, v, BASE+A);
+      } else {
+        copyTV(L, TOP+2, BASE+A); /* Copy value to third argument. */
+        vm_call_cont(L, TOP, 3);
       }
     }
     break;
@@ -1799,7 +1795,9 @@ void lj_cont_ra(void) {
   copyTVs(L, BASE+A, CONT_BASE+CONT_OFS, 1, MULTRES);
 }
 
-void lj_cont_nop(void)	  { assert(0 && "NYI"); }
+void lj_cont_nop(void) {
+  /* Do nothing, just continue execution. */
+}
 
 void lj_cont_condt(void) {
   /* Branch if result is true. */
