@@ -1413,6 +1413,7 @@ static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp) 
   int delta = callbase - BASE;
   BASE = callbase;
   NARGS = _nargs;
+  TOP = BASE + NARGS;
   f = BASE-2;
   if (!tvisfunc(f)) {
     lj_meta_call(L, f, BASE + NARGS);
