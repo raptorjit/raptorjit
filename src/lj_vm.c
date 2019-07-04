@@ -1209,9 +1209,10 @@ void execute(lua_State *L) {
         /* First argument (BASE) is the function to call. */
         TValue *callbase = BASE+2;
         int hookflag = hook_active(G(L)) ? 1 : 0;
-        NARGS -= 1;
-        /* Copy remaining function arguments. */
-        copyTVs(L, callbase, callbase-1, NARGS, NARGS);
+        int copyargs = NARGS--;
+        /* Copy remaining function arguments (from top to avoid clobberin'). */
+        while (copyargs--)
+          copyTV(L, callbase+copyargs, BASE+1+copyargs);
         vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
       }
       break;
