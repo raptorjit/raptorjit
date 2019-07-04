@@ -408,7 +408,12 @@ void execute(lua_State *L) {
       if (flag) branchPC(D);
     }
     break;
-  case BC_ISTYPE: assert(0 && "NYI BYTECODE: ISTYPE");
+  case BC_ISTYPE:
+    /* ISTYPE: assert A is of type -D. */
+    TRACE("ISTYPE");
+    if (~itype(BASE+A) != D)
+      lj_meta_istype(L, A, D);
+    break;
   case BC_ISNUM:  assert(0 && "NYI BYTECODE: ISNUM");
   case BC_MOV:
     TRACE("MOV");
