@@ -1638,7 +1638,7 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   const BCIns *oldpc = PC;
   TValue *newbase = NULL;
   /* "Neg. delta means cframe w/o frame." */
-  int nresults = -savestack(L, L->top) / sizeof(TValue);
+  int nresults = -savestack(L, L->top);
   /* Add to CFrame chain. */
   CFrame cf = { L->cframe, L, nresults };
   setmref(cf.pc, cf.L); /* Safe default PC ref. */
@@ -1648,24 +1648,25 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   /* Setup "catch" jump buffer for a protected call. */
   res = _setjmp(cf.jb);
   /* Try */
-  if (res <= 0) /* -1 signals to continue from pcall, xpcall. */
+  if (res <= 0) { /* -1 signals to continue from pcall, xpcall. */
     switch (res) {
     case 0:
       newbase = cp(L, f, ud);
-      L->status = LUA_OK;
       if (!newbase) break;
       vm_call(L, newbase, L->top - newbase, FRAME_CP);
+      STATE = ~LJ_VMST_INTERP;
     default:
       execute(L);
     }
-  else
+    /* Unlink C frame. */
+    L->cframe = cf.previous;
+  } else {
     /* Catch */
-    L->status = res;
-  /* Unlink C frame. */
-  L->cframe = cf.previous;
+    res = res;
+  }
   /* Restore PC. */
   PC = oldpc;
-  return L->status;
+  return res <= 0 ? LUA_OK : res;
 }
 
 /* Resume coroutine, see ASM fast function resume. */
