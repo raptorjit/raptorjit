@@ -52,6 +52,7 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 void fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
+static inline int32_t tobit (TValue *num);
 
 /* Simple debug utility. */
 #if 0
@@ -1334,11 +1335,27 @@ void execute(lua_State *L) {
     case 0x89:
       TRACEFF("tobit");
       if (tvisnum(BASE)) {
-        BASE->u64 += 0x4338000000000000; // sseconst_tobit
+        BASE->n = tobit(BASE);
         vm_return(L, BASE[-1].u64, 0, 1);
       } else
         fff_fallback(L);
       break;
+    case 0x91:
+      TRACEFF("band");
+      {
+        if (!tvisnum(BASE))
+          goto band_fallback;
+        BASE->n = tobit(BASE);
+        while (NARGS-- > 1) {
+          if (!tvisnum(BASE+NARGS)) goto band_fallback;
+          BASE->n = BASE->u64 & tobit(BASE+NARGS);
+        }
+        vm_return(L, BASE[-1].u64, 0, 1);
+        break;
+      band_fallback:
+        fff_fallback(L);
+        break;
+      }
     case 0x96:
       TRACEFF("sub");
       {
@@ -1576,6 +1593,15 @@ void fff_fallback(lua_State *L) {
   default: /* FFH_RES(n) */
     vm_return(L, link, -2, res-1);
   }
+}
+
+
+/* -- tobit helper --------------------------------------------------------- */
+
+static inline int32_t tobit (TValue *n) {
+  static union {lua_Number n; uint64_t b;} bn;
+  bn.n = n->n + 6755399441055744.0;
+  return (int32_t)bn.b;
 }
 
 
