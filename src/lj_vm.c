@@ -785,22 +785,14 @@ void execute(lua_State *L) {
   case BC_TSETS:
     TRACE("TSETS");
     {
-      TValue *o = BASE+B;
-      GCstr *key = kgcref(C, GCstr);
-      if (tvistab(o)) {
-        GCtab *tab = tabV(o);
-        copyTV(L, lj_tab_setstr(L, tab, key), BASE+A);
-        lj_gc_anybarriert(L, tab);
-      } else {
-        TValue tvkey;
-        /* Convert key to tagged value. */
-        setgcVraw(&tvkey, obj2gco(key), LJ_TSTR);
-        // XXX SAVE_L
-        // XXX SAVE_PC
-        TValue *v = lj_meta_tset(L, o, &tvkey);
-        assert(v != NULL && "NYI: TSETS __newindex");
-        /* NOBARRIER: lj_meta_tset ensures the table is not black. */
+      TValue k, *v;
+      setgcVraw(&k, kgcref(C, GCobj), LJ_TSTR);
+      v = lj_meta_tset(L, BASE+B, &k);
+      if (v) {
         copyTV(L, v, BASE+A);
+      } else {
+        copyTV(L, TOP+2, BASE+A); /* Copy value to third argument. */
+        vm_call_cont(L, TOP, 3);
       }
       break;
     }
@@ -808,18 +800,14 @@ void execute(lua_State *L) {
     /* TSETB: B[C] = A where C is an unsigned literal. */
     TRACE("TSETB");
     {
-      TValue *o = BASE+B;
-      TValue key;
-      key.n = C;
-      if (tvistab(o)) {
-        GCtab *tab = tabV(o);
-        copyTV(L, lj_tab_set(L, tab, &key), BASE+A);
-        lj_gc_anybarriert(L, tab);
-      } else {
-        TValue *v = lj_meta_tset(L, o, &key);
-        assert(v != NULL && "NYI: TSETB __newindex");
-        /* NOBARRIER: lj_meta_tset ensures the table is not black. */
+      TValue k, *v;
+      k.n = C;
+      v = lj_meta_tset(L, BASE+B, &k);
+      if (v) {
         copyTV(L, v, BASE+A);
+      } else {
+        copyTV(L, TOP+2, BASE+A); /* Copy value to third argument. */
+        vm_call_cont(L, TOP, 3);
       }
     }
     break;
