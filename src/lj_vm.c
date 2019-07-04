@@ -1585,7 +1585,6 @@ void fff_fallback(lua_State *L) {
 int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
 {
   int res;
-  GCfunc *func;
   const BCIns *oldpc = PC;
   /* Add new CFrame to the chain. */
   CFrame cf = { L->cframe, L, nres };
@@ -1594,16 +1593,9 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
-  /* Set return frame link. */
-  newbase[-1].u64 = (p ? FRAME_CP : FRAME_C) + ((newbase - BASE) << 3);
   /* Setup VM state for callee. */
   STATE = ~LJ_VMST_INTERP;
-  NARGS = (TOP - newbase);
-  BASE = newbase;
-  TOP = BASE + NARGS;
-  /* Branch and execute callee. */
-  func = funcV(newbase-2);
-  PC = mref(func->l.pc, BCIns);
+  vm_call(L, newbase, TOP - newbase, (p ? FRAME_CP : FRAME_C));
   /* Setup "catch" jump buffer for a protected call. */
   res = _setjmp(cf.jb);
   if (res <= 0) { /* -1 signals to continue from pcall, xpcall. */
