@@ -50,7 +50,7 @@ static uint64_t insctr_tracefrom = UINT64_MAX;
 static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp);
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
-void fff_fallback(lua_State *L);
+int fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline int32_t tobit (TValue *num);
 
@@ -1063,10 +1063,11 @@ void execute(lua_State *L) {
     case 0x61:
       TRACEFF("assert");
       {
-        if (tvistruecond(BASE))
-          vm_return(L, BASE[-1].u64, 0, NARGS);
-        else
-          fff_fallback(L);
+        if (tvistruecond(BASE)) {
+          if (vm_return(L, BASE[-1].u64, 0, NARGS)) return;
+        } else {
+          if (fff_fallback(L)) return;
+        }
       }
       break;
     case 0x62:
@@ -1078,13 +1079,13 @@ void execute(lua_State *L) {
           type = LJ_TISNUM;
         type = ~type;
         BASE[-2] = f->upvalue[type];
-        vm_return(L, BASE[-1].u64, -2, 1);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       }
       break;
     case 0x64:
       TRACEFF("pairs");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x65:
       TRACEFF("ipairs_aux");
@@ -1093,7 +1094,7 @@ void execute(lua_State *L) {
         TValue *i = BASE+1;
         const TValue *v;
         if (!tvistab(tab) || !tvisnum(i)) {
-          fff_fallback(L);
+          if (fff_fallback(L)) return;
           break;
         }
         uint64_t link = BASE[-1].u64;
@@ -1114,13 +1115,14 @@ void execute(lua_State *L) {
         vm_return(L, link, -2, 2); /* Iterate: return (i, value). */
         break;
         /* End of interator: return no values. */
-        ipairs_end: vm_return(L, link, -2, 0);
+      ipairs_end:
+        if (vm_return(L, link, -2, 0)) return;
       }
       break;
     case 0x66:
       TRACEFF("ipairs");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x67:
       TRACEFF("getmetatable");
@@ -1138,36 +1140,37 @@ void execute(lua_State *L) {
         } else {
           setnilV(BASE-2);
         }
-        vm_return(L, BASE[-1].u64, -2, 1);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       }
       break;
     case 0x68:
       TRACEFF("setmetatable");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x6a:
       TRACEFF("tonumber");
       {
-        if (NARGS != 1 || !tvisnumber(BASE))
-          fff_fallback(L);
-        else
-          vm_return(L, BASE[-1].u64, 0, 1);
+        if (NARGS != 1 || !tvisnumber(BASE)) {
+          if (fff_fallback(L)) return;
+        } else {
+          if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+        }
       }
       break;
     case 0x69:
       TRACEFF("rawget");
-      if (!tvistab(BASE))
-        fff_fallback(L);
-      else {
+      if (!tvistab(BASE)) {
+        if (fff_fallback(L)) return;
+      } else {
         copyTV(L, BASE, lj_tab_get(L, tabV(BASE), BASE+1));
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       }
       break;
     case 0x6b:
       TRACEFF("tostring");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x6c:
       TRACEFF("pcall");
@@ -1194,7 +1197,7 @@ void execute(lua_State *L) {
         f = BASE[0]; BASE[0] = BASE[1]; BASE[1] = f;
         vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
       } else
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
       break;
     case 0x6f:
       TRACEFF("resume");
@@ -1275,36 +1278,36 @@ void execute(lua_State *L) {
           /* Return (false, <error>) */
           setboolV(BASE, 0);
           copyTV(L, BASE+1, co->top);
-          vm_return(L, BASE[-1].u64, 0, 2);
+          if (vm_return(L, BASE[-1].u64, 0, 2)) return;
         }
         break;
       resume_fallback:
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
         break;
       }
     case 0x72:
       TRACEFF("floor");
       if (tvisnum(BASE)) {
         setnumV(BASE, lj_vm_floor(numV(BASE)));
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       } else
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
       break;
     case 0x73:
       TRACEFF("ceil");
       if (tvisnum(BASE)) {
         setnumV(BASE, lj_vm_ceil(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
       break;
     case 0x89:
       TRACEFF("tobit");
       if (tvisnum(BASE)) {
         BASE->n = tobit(BASE);
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       } else
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
       break;
     case 0x91:
       TRACEFF("band");
@@ -1316,10 +1319,10 @@ void execute(lua_State *L) {
           if (!tvisnum(BASE+NARGS)) goto band_fallback;
           BASE->n = BASE->u64 & tobit(BASE+NARGS);
         }
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
         break;
       band_fallback:
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
         break;
       }
     case 0x96:
@@ -1329,7 +1332,7 @@ void execute(lua_State *L) {
           lj_gc_step_fixtop(L);
         if (NARGS < 2 || !tvisstr(BASE) || !tvisnum(BASE+1)
             || (NARGS > 2 && !tvisnum(BASE+2))) {
-          fff_fallback(L);
+          if (fff_fallback(L)) return;
           break;
         }
         GCstr *str = strV(BASE);
@@ -1345,7 +1348,7 @@ void execute(lua_State *L) {
           end = min(end, str->len);
         str = lj_str_new(L, strdata(str)+start-1, max(1+end-start, 0));
         setgcVraw(BASE-2, (GCobj *)str, LJ_TSTR);
-        vm_return(L, BASE[-1].u64, -2, 1);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       }
       break;
     case 0x98:
@@ -1354,7 +1357,7 @@ void execute(lua_State *L) {
         if (G(L)->gc.total >= G(L)->gc.threshold)
           lj_gc_step(L);
         if (!tvisstr(BASE))
-          fff_fallback(L);
+          if (fff_fallback(L)) return;
         GCstr *str = strV(BASE);
         SBuf *buf = &G(L)->tmpbuf;
         buf->L = L;
@@ -1367,7 +1370,7 @@ void execute(lua_State *L) {
         default: assert(0 && "NYI: fast string operation");
         }
         setgcVraw(BASE, (GCobj *)lj_buf_tostr(buf), LJ_TSTR);
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       }
       break;
     default: assert(0 && "INVALID BYTECODE");
@@ -1541,13 +1544,15 @@ static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs) {
  * Call fallback handler for ASM fast functions (relics from the ASM VM) and
  * massage VM state to return to caller.
  *
- * This can not just use vm_return and needs a special handler because ASK fast
+ * This can not just use vm_return and needs a special handler because ASM fast
  * functions are peculiar in multiple ways:
  *  - they use the stack space BASE-2..BASE+NARGS
  *  - they can yield to retries and tailcalls (NYI)
  *
+ * Returns the value of vm_return, potentially signaling the caller to return
+ * to a C frame.
  */
-void fff_fallback(lua_State *L) {
+int fff_fallback(lua_State *L) {
   uint64_t link = BASE[-1].u64;
   TOP = BASE + NARGS;
   assert(TOP+1+LUA_MINSTACK <= mref(L->maxstack, TValue));
@@ -1557,7 +1562,7 @@ void fff_fallback(lua_State *L) {
   case -1: assert(0 && "NYI: fff_fallback tailcall");
   case  0: assert(0 && "NYI: fff_fallback retry");
   default: /* FFH_RES(n) */
-    vm_return(L, link, -2, res-1);
+    return vm_return(L, link, -2, res-1);
   }
 }
 
