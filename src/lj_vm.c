@@ -1387,11 +1387,12 @@ void execute(lua_State *L) {
       {
         if (!tvisnum(BASE))
           goto band_fallback;
-        BASE->n = tobit(BASE);
+        int32_t res = tobit(BASE);
         while (NARGS-- > 1) {
           if (!tvisnum(BASE+NARGS)) goto band_fallback;
-          BASE->n = BASE->u64 & tobit(BASE+NARGS);
+          res &= tobit(BASE+NARGS);
         }
+        BASE->n = res;
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
         break;
       band_fallback:
