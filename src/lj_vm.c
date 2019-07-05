@@ -1290,6 +1290,14 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
         break;
       }
+    case 0x71:
+      TRACEFF("abs");
+      if (tvisnum(BASE)) {
+        setnumV(BASE, BASE->n < 0 ? -1*BASE->n : BASE->n);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
     case 0x72:
       TRACEFF("floor");
       if (tvisnum(BASE)) {
