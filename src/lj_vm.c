@@ -1408,17 +1408,16 @@ void execute(lua_State *L) {
  * on the offset between BASE and `callbase'.
  */
 static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp) {
-  TValue *f;
+  TValue *f = callbase-2;
   int delta = callbase - BASE;
+  if (!tvisfunc(f)) {
+    lj_meta_call(L, f, callbase + _nargs);
+    _nargs += 1;
+    assert(KBASE != callbase && "NYI: vm_call __call in tailcall.");
+  }
   BASE = callbase;
   NARGS = _nargs;
-  TOP = BASE + NARGS;
-  f = BASE-2;
-  if (!tvisfunc(f)) {
-    lj_meta_call(L, f, BASE + NARGS);
-    NARGS += 1;
-    assert(KBASE != BASE && "NYI: vm_call __call in tailcall.");
-  }
+  TOP = BASE + _nargs;
   BASE[-1].u64 = (ftp == FRAME_LUA) ? (intptr_t)PC : (delta << 3) + ftp;
   PC = mref(funcV(f)->l.pc, BCIns);
 }
