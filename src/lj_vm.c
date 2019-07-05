@@ -1692,15 +1692,12 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   }
   /* Setup "catch" jump buffer for a protected call. */
   res = _setjmp(cf.jb);
-  if (res <= 0) { /* -1 signals to continue from pcall, xpcall. */
+  if (res <= 0) /* -1 signals to continue from pcall, xpcall. */
     /* Try */
     execute(L);
-    /* Unlink C frame. */
-    L->cframe = cf.previous;
-  } else {
+  else
     /* Catch */
     L->status = res;
-  }
   /* Restore PC. */
   PC = oldpc;
   return L->status;
