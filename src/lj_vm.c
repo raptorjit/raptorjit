@@ -669,8 +669,25 @@ void execute(lua_State *L) {
         lj_gc_barrieruv(G(L), v);
     }
     break;
-  case BC_USETN:  assert(0 && "NYI BYTECODE: USETN");
-  case BC_USETP:  assert(0 && "NYI BYTECODE: USETP");
+  case BC_USETN:
+    /* USETN: Set upvalue A to number constant D. */
+    {
+      GCfuncL *parent = &(funcV(BASE-2)->l);
+      GCupval *uv = &parent->uvptr[A]->uv;
+      TValue *v = (TValue *)uv->v;
+      setnumV(v, numV(ktv(D)));
+    }
+    break;
+  case BC_USETP:
+    /* USETP: Set upvalue A to primitive D. */
+    {
+      GCfuncL *parent = &(funcV(BASE-2)->l);
+      GCupval *uv = &parent->uvptr[A]->uv;
+      TValue *v = (TValue *)uv->v;
+      setpriV(v, ~D);
+      copyTV(L, v, ktv(D));
+    }
+    break;
   case BC_UCLO:
     /* UCLO: Close upvalues for slots ≥ rbase and jump to target D. */
     TRACE("UCLO");
