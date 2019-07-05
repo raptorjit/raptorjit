@@ -845,8 +845,13 @@ void execute(lua_State *L) {
       assert(((BASE[-1].u64 & FRAME_TYPE) == FRAME_LUA
               || (BASE[-1].u64 & FRAME_TYPEP) != FRAME_VARG)
              && "NYI: CALLT from vararg function");
-      assert(funcV(BASE-2)->l.ffid <= FF_C
-             && "NYI: CALLT to ASM fast function");
+      if (funcV(BASE-2)->l.ffid > FF_C)
+        /* Tailcall to a fast function. */
+        if ((link & FRAME_TYPE) != FRAME_LUA) {
+          /* Frame below is a C frame. Need to set constant pool address. */
+          GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+          KBASE = mref(pt->k, void);
+        }
       vm_call(L, BASE, NARGS, FRAME_LUA);
       /* Replace frame link set by vm_call with parent link. */
       BASE[-1].u64 = link;
