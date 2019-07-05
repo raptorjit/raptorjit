@@ -1350,6 +1350,10 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
         break;
       }
+    case 0x70:
+      TRACEFF("wrap_aux");
+      {
+      }
     case 0x71:
       TRACEFF("abs");
       if (tvisnum(BASE)) {
@@ -1378,6 +1382,14 @@ void execute(lua_State *L) {
       TRACEFF("tobit");
       if (tvisnum(BASE)) {
         BASE->n = tobit(BASE);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x8c:
+      TRACEFF("lshift");
+      if (tvisnum(BASE) && tvisnum(BASE+1)) {
+        BASE->n = tobit(BASE) << tobit(BASE+1);
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       } else
         if (fff_fallback(L)) return;
