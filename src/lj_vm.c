@@ -711,27 +711,38 @@ void execute(lua_State *L) {
   case BC_GGET:
     TRACE("GGET");
     /* A = _G[D] */
+    vm_savepc(L);
     {
       GCfunc *fn = funcV(BASE-2);
-      GCtab *env = tabref(fn->l.env);
-      GCstr *key = kgcref(D, GCstr);
-      cTValue *tv = lj_tab_getstr(env, key);
-      if (tv)
-        copyTV(L, BASE+A, tv);
+      TValue e, k;
+      const TValue *v;
+      setgcVraw(&e, fn->l.env, LJ_TTAB);
+      setgcVraw(&k, kgcref(D, GCobj), LJ_TSTR);
+      v = lj_meta_tget(L, &e, &k);
+      if (v)
+        copyTV(L, BASE+A, v);
       else
-        setnilV(BASE+A);
-      break;
+        vm_call_cont(L, TOP, 2);
     }
+    break;
   case BC_GSET:
+    /* _G[D] = A */
     TRACE("GSET");
+    vm_savepc(L);
     {
       GCfunc *fn = funcV(BASE-2);
-      GCtab *env = tabref(fn->l.env);
-      GCstr *key = kgcref(D, GCstr);
-      copyTV(L, lj_tab_setstr(L, env, key), BASE+A);
-      lj_gc_anybarriert(L, env);
-      break;
+      TValue e, k, *v;
+      setgcVraw(&e, fn->l.env, LJ_TTAB);
+      setgcVraw(&k, kgcref(C, GCobj), LJ_TSTR);
+      v = lj_meta_tset(L, &e, &k);
+      if (v) {
+        copyTV(L, v, BASE+A);
+      } else {
+        copyTV(L, TOP+2, BASE+A); /* Copy value to third argument. */
+        vm_call_cont(L, TOP, 3);
+      }
     }
+    break;
   case BC_TGETV:
     /* TGETV: A = B[C] */
     TRACE("TGETV");
