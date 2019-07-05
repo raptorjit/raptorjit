@@ -1399,6 +1399,23 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
         break;
       }
+    case 0x93:
+      TRACEFF("bxor");
+      {
+        if (!tvisnum(BASE))
+          goto bxor_fallback;
+        int32_t res = tobit(BASE);
+        while (NARGS-- > 1) {
+          if (!tvisnum(BASE+NARGS)) goto band_fallback;
+          res ^= tobit(BASE+NARGS);
+        }
+        BASE->n = res;
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+        break;
+      bxor_fallback:
+        if (fff_fallback(L)) return;
+        break;
+      }
     case 0x96:
       TRACEFF("sub");
       vm_savepc(L);
