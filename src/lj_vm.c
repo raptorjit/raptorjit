@@ -712,63 +712,41 @@ void execute(lua_State *L) {
     /* TGETV: A = B[C] */
     TRACE("TGETV");
     {
-      TValue *o = BASE+B;
-      cTValue *res = NULL;
-      if (tvistab(o))
-        res = lj_tab_get(L, tabV(o), BASE+C);
-      if (tvisnil(res)) {
-        res = lj_meta_tget(L, o, BASE+C);
-        if (!res) vm_call_cont(L, TOP, 2);
-      }
-      if (res)
-        copyTV(L, BASE+A, res);
+      const TValue *v = lj_meta_tget(L, BASE+B, BASE+C);
+      if (v)
+        copyTV(L, BASE+A, v);
       else
-        setnilV(BASE+A);
-      break;
+        vm_call_cont(L, TOP, 2);
     }
+    break;
   case BC_TGETS:
     /* TGETS: A = B[C] where C is a string constant. */
     TRACE("TGETS");
     {
-      TValue *o = BASE+B;
-      cTValue *res = NULL;
-      GCstr *key = kgcref(C, GCstr);
-      if (tvistab(o))
-        res = lj_tab_getstr(tabV(o), key);
-      if (!res) {
-        TValue tvkey;
-        /* Convert key to tagged value. */
-        setgcVraw(&tvkey, obj2gco(key), LJ_TSTR);
-        res = lj_meta_tget(L, o, &tvkey);
-        if (!res) vm_call_cont(L, TOP, 2);
-      }
-      if (res)
-        copyTV(L, BASE+A, res);
+      TValue k;
+      const TValue *v;
+      setgcVraw(&k, kgcref(C, GCobj), LJ_TSTR);
+      v = lj_meta_tget(L, BASE+B, &k);
+      if (v)
+        copyTV(L, BASE+A, v);
       else
-        setnilV(BASE+A);
-      break;
+        vm_call_cont(L, TOP, 2);
     }
+    break;
   case BC_TGETB:
     /* TGETB: A = B[C] where C is a byte literal. */
     TRACE("TGETB");
     {
-      TValue *o = BASE+B;
-      cTValue *res = NULL;
-      if (tvistab(o))
-        res = lj_tab_getint(tabV(o), C);
-      if (!res) {
-        TValue tvkey;
-        /* Convert key to tagged value. */
-        setnumV(&tvkey, C);
-        res = lj_meta_tget(L, o, &tvkey);
-        if (!res) vm_call_cont(L, TOP, 2);
-      }
-      if (res)
-        copyTV(L, BASE+A, res);
+      TValue k;
+      const TValue *v;
+      k.n = C;
+      v = lj_meta_tget(L, BASE+B, &k);
+      if (v)
+        copyTV(L, BASE+A, v);
       else
-        setnilV(BASE+A);
-      break;
+        vm_call_cont(L, TOP, 2);
     }
+    break;
   case BC_TGETR:  assert(0 && "NYI BYTECODE: TGETR");
   case BC_TSETV:
     TRACE("TSETV");
