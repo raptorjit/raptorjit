@@ -1265,7 +1265,7 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
       break;
     case 0x6f:
-      TRACEFF("resume");
+      TRACEFF("coroutine.resume");
       {
         /* Coroutines (from an implementation standpoint) are implemented as
          * separate execution contexts (lua_State), notably with dedicated
@@ -1355,7 +1355,7 @@ void execute(lua_State *L) {
       {
       }
     case 0x71:
-      TRACEFF("abs");
+      TRACEFF("math.abs");
       if (tvisnum(BASE)) {
         setnumV(BASE, BASE->n < 0 ? -1*BASE->n : BASE->n);
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
@@ -1363,7 +1363,7 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
       break;
     case 0x72:
-      TRACEFF("floor");
+      TRACEFF("math.floor");
       if (tvisnum(BASE)) {
         setnumV(BASE, lj_vm_floor(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
@@ -1371,7 +1371,7 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
       break;
     case 0x73:
-      TRACEFF("ceil");
+      TRACEFF("math.ceil");
       if (tvisnum(BASE)) {
         setnumV(BASE, lj_vm_ceil(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
@@ -1379,7 +1379,7 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
       break;
     case 0x89:
-      TRACEFF("tobit");
+      TRACEFF("bit.tobit");
       if (tvisnum(BASE)) {
         BASE->n = tobit(BASE);
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
@@ -1387,7 +1387,7 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
       break;
     case 0x8c:
-      TRACEFF("lshift");
+      TRACEFF("bit.lshift");
       if (tvisnum(BASE) && tvisnum(BASE+1)) {
         BASE->n = tobit(BASE) << tobit(BASE+1);
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
@@ -1395,7 +1395,7 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
       break;
     case 0x91:
-      TRACEFF("band");
+      TRACEFF("bit.band");
       {
         if (!tvisnum(BASE))
           goto band_fallback;
@@ -1412,7 +1412,7 @@ void execute(lua_State *L) {
         break;
       }
     case 0x93:
-      TRACEFF("bxor");
+      TRACEFF("bit.bxor");
       {
         if (!tvisnum(BASE))
           goto bxor_fallback;
@@ -1429,7 +1429,7 @@ void execute(lua_State *L) {
         break;
       }
     case 0x96:
-      TRACEFF("sub");
+      TRACEFF("string.sub");
       vm_savepc(L);
       lj_gc_check(L);
       {
@@ -1467,7 +1467,7 @@ void execute(lua_State *L) {
         buf->p = buf->b;
         switch ((uint32_t)OP) {
         case 0x98:
-          TRACEFF("string_lower");
+          TRACEFF("string.lower");
           lj_buf_putstr_lower(buf, str);
           break;
         default: assert(0 && "NYI: fast string operation");
