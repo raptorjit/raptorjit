@@ -54,6 +54,8 @@ int fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline void vm_savepc(lua_State *L, const BCIns *pc);
 static inline int32_t tobit(TValue *num);
+/* From lib_base.c: */
+void lj_ffh_coroutine_wrap_err(lua_State *L, lua_State *co);
 
 /* Simple debug utility. */
 #if 0
@@ -1264,29 +1266,59 @@ void execute(lua_State *L) {
       } else
         if (fff_fallback(L)) return;
       break;
+    /*
+     * -- Resuming and yielding from coroutines ---------------------------
+     *
+     * Coroutines (from an implementation standpoint) are implemented as
+     * separate execution contexts (lua_State), notably with dedicated
+     * stacks, that execute a given function interleaved with the execution
+     * of the parent lua_State.
+     *
+     * An instance of an execution state (represented as a lua_State) is
+     * also called a "thread". A thread combined with an "initial function"
+     * forms what we call a coroutine.
+     *
+     * Resuming a coroutine for the first time is like calling the initial
+     * function inside the coroutine's thread with the arguments provided
+     * (which have to be copied to the coroutine’s stack.)
+     *
+     * A resumed coroutine can yield result values, or throw an error. A
+     * coroutine that has yielded can be resumed again to continue
+     * execution from the point where it yielded.
+     *
+     * Resuming a coroutine again after a yield is like returning to the
+     * caller of yield in the coroutine’s thread with the arguments to
+     * resume being the result values.
+     */
+    case 0x6e:
+      TRACEFF("coroutine.yield");
+      {
+        /* Yielding from a coroutine means unlinking its CFrame and setting its
+         * thread status to LUA_YIELD before returning to lj_vm_resume.
+         */
+        if ((intptr_t)L->cframe & CFRAME_RESUME) {
+          TOP = BASE+NARGS;
+          L->cframe = 0;
+          L->status = LUA_YIELD;
+          return;
+        } else
+          if (fff_fallback(L)) return;
+      }
+      break;
     case 0x6f:
       TRACEFF("coroutine.resume");
+    case 0x70:
+      if (OP == 0x70)
+        TRACEFF("coroutine.wrap_aux");
       {
-        /* Coroutines (from an implementation standpoint) are implemented as
-         * separate execution contexts (lua_State), notably with dedicated
-         * stacks, that execute a given function interleaved with the execution
-         * of the parent lua_State.
+        /* The code for the resume and the wrap_aux fast functions are similar
+         * enough to share most of their code. They differ as follows:
          *
-         * An instance of an execution state (represented as a lua_State) is
-         * also called a "thread". A thread combined with an "initial function"
-         * forms what we call a coroutine.
+         *   - resume behaves like pcall, catching errors during coroutine
+         *     execution and prepending a boolean status value to the results
          *
-         * Resuming a coroutine for the first time is like calling the initial
-         * function inside the coroutine's thread with the arguments provided
-         * (which have to be copied to the coroutine’s stack.)
-         *
-         * A resumed coroutine can yield result values, or throw an error. A
-         * coroutine that has yielded can be resumed again to continue
-         * execution from the point where it yielded.
-         *
-         * Resuming a coroutine again after a yield is like returning to the
-         * caller of yield in the coroutine’s thread with the arguments to
-         * resume being the result values.
+         *   - wrap_aux behaves like a regular function call, it returns the
+         *     results as is, but throws an error if the coroutine fails
          *
          * The code below prepares the stack frame of coroutine `co'. The frame
          * starts at `rbase' and ends at `rtop'. See lj_vm_resume for how the
@@ -1298,11 +1330,16 @@ void execute(lua_State *L) {
          */
         lua_State *co;
         TValue *rbase, *rtop;
-        /* First argument must be a thread (the coroutine object). */
-        if (tvisthread(BASE))
-          co = threadV(BASE);
-        else
-          goto resume_fallback;
+        if (OP == 0x6f) {
+          /* resume: first argument must be a thread (the coroutine object). */
+          if (tvisthread(BASE))
+            co = threadV(BASE);
+          else
+            goto resume_fallback;
+        } else {
+          /* wrap_aux: get thread from caller upvalue. */
+          co = threadV(&funcV(BASE-2)->c.upvalue[0]);
+        }
         /* The thread must not have a CFrame attached. (This is where we will
            store a reference to the resuming lua_State?) */
         if (co->cframe)
@@ -1317,29 +1354,49 @@ void execute(lua_State *L) {
         /* Prepare frame at coroutine’s TOP. (When resumed for the first time,
            make room for frame link.) */
         rbase = co->top + (co->status == LUA_OK);
-        /* Extend coroutine frame to hold remaining arguments (-1 for `co'). */
-        rtop = rbase + NARGS-1;
+        /* Extend coroutine frame to hold remaining arguments. */
+        rtop = rbase + NARGS - (OP == 0x6f); /* resume: -1 for `co' */
         /* Make sure we don't exceed the coroutine’s stack space. */
         if (rtop > mref(co->maxstack, TValue))
           goto resume_fallback;
         else
           co->top = rtop;
-        /* Keep resumed thread in parent stack for GC. */
-        TOP = ++BASE;
-        /* Copy arguments. */
-        copyTVs(L, rbase, BASE, rtop-rbase, NARGS-1);
+        /* Save caller PC. */
+        vm_savepc(L, (BCIns*)BASE[-1].u64);
+        if (OP == 0x6f)
+          /* resume: keep resumed thread in parent stack for GC. */
+          TOP = ++BASE;
+        /* Copy arguments. resume: -1 for `co' */
+        copyTVs(L, rbase, BASE, rtop-rbase, NARGS - (OP == 0x6f));
         /* Resume coroutine at rbase. */
         lj_vm_resume(co, rbase, 0, 0);
         /* Reference the now-current lua_State. */
         setgcref(G(L)->cur_L, obj2gco(L));
-        /* Undo BASE adjustment. */
-        BASE -= 1;
         /* Handle result depending in co->status. */
-        if (co->status == LUA_YIELD) {
-          assert(0 && "NYI: coroutine yield");
+        if (co->status <= LUA_YIELD) {
+          /* Coroutine yielded with results. */
+          int nresults = co->top - co->base;
+          /* Clear coroutine stack. */
+          co->top = co->base;
+          /* Ensure we have stack space for coroutine results. */
+          assert(BASE+nresults <= mref(L->maxstack, TValue));
+          /* Copy coroutine results */
+          copyTVs(L, BASE, co->base, nresults, nresults);
+          if (OP==0x6f) {
+            /* resume: undo BASE adjustment, prepend true to results. */
+            BASE -= 1;
+            setboolV(BASE, 1);
+          }
+          vm_return(L, BASE[-1].u64, 0, nresults);
         } else {
           /* Coroutine returned with error (at co->top-1). */
+          if (OP == 0x70)
+            /* wrap_aux: throw error. */
+            lj_ffh_coroutine_wrap_err(L, co);
+          /* resume: catch the error. */
           co->top -= 1; /* Clear error from coroutine stack. */
+          /* Undo BASE adjustment. */
+          BASE -= 1;
           /* Return (false, <error>) */
           setboolV(BASE, 0);
           copyTV(L, BASE+1, co->top);
@@ -1349,10 +1406,6 @@ void execute(lua_State *L) {
       resume_fallback:
         if (fff_fallback(L)) return;
         break;
-      }
-    case 0x70:
-      TRACEFF("wrap_aux");
-      {
       }
     case 0x71:
       TRACEFF("math.abs");
@@ -1774,11 +1827,11 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   return res <= 0 ? LUA_OK : res;
 }
 
-/* Resume coroutine, see ASM fast function resume. */
+/* Resume coroutine, see ASM fast functions resume and yield. */
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   int res;
   const BCIns *oldpc = PC;
-  /* Set CFrame. */
+  /* Set CFrame. (Note: this frame is unlinked by yield.) */
   CFrame cf = { 0, L};
   setmref(L->cframe, (intptr_t)&cf + CFRAME_RESUME);
   /* Reference the now-current lua_State. */
@@ -1790,7 +1843,7 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   } else {
     /* Resume after yield (like a return). */
     L->status = LUA_OK;
-    assert(0 && "NYI: vm_resume after yield.");
+    vm_return(L, BASE[-1].u64, newbase-BASE, TOP-newbase);
   }
   /* Setup "catch" jump buffer for a protected call. */
   res = _setjmp(cf.jb);
