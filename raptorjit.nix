@@ -10,7 +10,7 @@ mkDerivation rec {
   name = "raptorjit-${version}";
   inherit version;
   src = source;
-  buildInputs = [ luajit ];  # LuaJIT to bootstrap DynASM
+  buildInputs = [ luajit nasm ];  # LuaJIT to bootstrap DynASM
   dontStrip = true;
   patchPhase = ''
     substituteInPlace Makefile --replace "/usr/local" "$out"

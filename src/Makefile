@@ -193,7 +193,7 @@ Host_XCFLAGS+= -DLUAJIT_OS=LUAJIT_OS_LINUX
 ##############################################################################
 
 LJVM_C= lj_vm.c
-LJVM_O= lj_vm.o
+LJVM_O= lj_vm.o lj_vm_ffi_call_x64.o
 LJVM_BOUT= $(LJVM_C)
 LJVM_MODE= elfasm
 
@@ -339,10 +339,10 @@ lj_folddef.h: $(BUILDVM_T) lj_opt_fold.c
 	$(Q)$(TARGET_DYNCC) $(TARGET_ACFLAGS) -c -o $(@:.o=_dyn.o) $<
 	$(Q)$(TARGET_CC) $(TARGET_ACFLAGS) -c -o $@ $<
 
-%.o: %.S
-	$(E) "ASM       $@"
-	$(Q)$(TARGET_DYNCC) $(TARGET_ASFLAGS) -c -o $(@:.o=_dyn.o) $<
-	$(Q)$(TARGET_CC) $(TARGET_ASFLAGS) -c -o $@ $<
+%.o: %.asm
+	$(E) "NASM       $@"
+	$(Q)nasm -f elf64 -F dwarf -o $@ $<
+	$(Q)ln -sf $@ $(@:.o=_dyn.o)
 
 $(LUAJIT_O):
 	$(E) "CC        $@"
