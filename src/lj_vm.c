@@ -306,9 +306,16 @@ void execute(lua_State *L) {
       int flag = (OP == BC_ISNEV); // Invert flag on ISNEV.
       if (tvisnum(x) && tvisnum(y))
         flag ^= (x->n == y->n);
-      else if (tviscdata(x) || tviscdata(y))
-        assert(0 && "NYI: ISEQV/ISNEV on cdata.");
-      else if (x->u64 == y->u64)
+      else if (tviscdata(x) || tviscdata(y)) {
+        // Either object is cdata.
+        vm_savepc(L, (BCIns*)((intptr_t)PC-4));
+        TValue *res = lj_meta_equal_cd(L, curins);
+        if ((intptr_t)res > 1) {
+          vm_call_cont(L, res, 2);
+          break; /* Do not clobber PC! */
+        } else
+          flag = (intptr_t)res;
+      } else if (x->u64 == y->u64)
         // Same GCobjs or pvalues?
         flag ^= 1;
       else if (itype(x) != itype(y))
@@ -316,7 +323,7 @@ void execute(lua_State *L) {
         flag = flag;
       else if (itype(x) <= LJ_TISTABUD) {
         // Different tables or userdatas. Need to check __eq metamethod.
-        vm_savepc(L, PC);
+        vm_savepc(L, (BCIns*)((intptr_t)PC-4));
         TValue *res = lj_meta_equal(L, gcval(BASE+A), gcval(BASE+D), flag);
         if ((intptr_t)res != flag) {
           vm_call_cont(L, res, 2);
@@ -355,8 +362,15 @@ void execute(lua_State *L) {
       int flag = (OP == BC_ISNEN); // Invert flag on ISNEN.
       if (tvisnum(BASE+A))
         flag ^= numV(BASE+A) == numV(ktv(D));
-      else if (tviscdata(BASE+A))
-        assert(0 && "NYI: ISEQN/ISNEN on cdata.");
+      else if (tviscdata(BASE+A)) {
+        vm_savepc(L, (BCIns*)((intptr_t)PC-4));
+        TValue *res = lj_meta_equal_cd(L, curins);
+        if ((intptr_t)res > 1) {
+          vm_call_cont(L, res, 2);
+          break; /* Do not clobber PC! */
+        } else
+          flag = (intptr_t)res;
+      }
       curins = *PC++;
       if (flag) branchPC(D);
     }
