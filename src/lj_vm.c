@@ -1410,26 +1410,124 @@ void execute(lua_State *L) {
     case 0x71:
       TRACEFF("math.abs");
       if (tvisnum(BASE)) {
-        setnumV(BASE, BASE->n < 0 ? -1*BASE->n : BASE->n);
-        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+        setnumV(BASE-2, BASE->n < 0 ? -1*BASE->n : BASE->n);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else
         if (fff_fallback(L)) return;
       break;
     case 0x72:
       TRACEFF("math.floor");
       if (tvisnum(BASE)) {
-        setnumV(BASE, lj_vm_floor(numV(BASE)));
-        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+        setnumV(BASE-2, lj_vm_floor(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else
         if (fff_fallback(L)) return;
       break;
     case 0x73:
       TRACEFF("math.ceil");
       if (tvisnum(BASE)) {
-        setnumV(BASE, lj_vm_ceil(numV(BASE)));
+        setnumV(BASE-2, lj_vm_ceil(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else
         if (fff_fallback(L)) return;
+      break;
+    case 0x74:
+      TRACEFF("math.sqrt");
+      if (tvisnum(BASE)) {
+        setnumV(BASE-2, sqrt(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x75:
+      TRACEFF("math.log10");
+      if (tvisnum(BASE)) {
+        setnumV(BASE-2, log10(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x76:
+      TRACEFF("math.exp");
+      if (tvisnum(BASE)) {
+        setnumV(BASE-2, exp(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x77:
+      TRACEFF("math.sin");
+      if (tvisnum(BASE)) {
+        setnumV(BASE-2, sin(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x78:
+      TRACEFF("math.cos");
+      if (tvisnum(BASE)) {
+        setnumV(BASE-2, cos(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x79:
+      TRACEFF("math.tan");
+      if (tvisnum(BASE)) {
+        setnumV(BASE-2, cos(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x82:
+      TRACEFF("math.log");
+      if (tvisnum(BASE)) {
+        setnumV(BASE-2, log(numV(BASE)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x83:
+      TRACEFF("math.atan2");
+      if (tvisnum(BASE) && tvisnum(BASE+1)) {
+        setnumV(BASE-2, atan2(numV(BASE), numV(BASE+1)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x86:
+      TRACEFF("math.ldexp");
+      if (tvisnum(BASE) && tvisnum(BASE+1)) {
+        setnumV(BASE-2, ldexp(numV(BASE), numV(BASE+1)));
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else
+        if (fff_fallback(L)) return;
+      break;
+    case 0x87:
+      TRACEFF("math.min");
+      if (!tvisnum(BASE))
+        goto min_fallback;
+      while (NARGS-- > 1) {
+        if (!tvisnum(BASE+NARGS)) goto min_fallback;
+        setnumV(BASE, min(numV(BASE), numV(BASE+NARGS)));
+      }
+      if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      break;
+    min_fallback:
+      if (fff_fallback(L)) return;
+      break;
+    case 0x88:
+      TRACEFF("math.max");
+      if (!tvisnum(BASE))
+        goto max_fallback;
+      while (NARGS-- > 1) {
+        if (!tvisnum(BASE+NARGS)) goto max_fallback;
+        setnumV(BASE, max(numV(BASE), numV(BASE+NARGS)));
+      }
+      if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      break;
+    max_fallback:
+      if (fff_fallback(L)) return;
       break;
     case 0x89:
       TRACEFF("bit.tobit");
