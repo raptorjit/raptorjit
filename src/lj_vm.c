@@ -52,7 +52,7 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 int fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
-static inline void vm_savepc(lua_State *L);
+static inline void vm_savepc(lua_State *L, const BCIns *pc);
 static inline int32_t tobit(TValue *num);
 
 /* Simple debug utility. */
@@ -279,7 +279,7 @@ void execute(lua_State *L) {
           flag = x > y || isnan(x) || isnan(y);
       } else {
         /* Fall back to meta-comparison. */
-        vm_savepc(L);
+        vm_savepc(L, PC);
         TValue *res = lj_meta_comp(L, BASE+A, BASE+D, OP);
         if ((intptr_t)res > 1) {
           vm_call_cont(L, res, 2);
@@ -314,7 +314,7 @@ void execute(lua_State *L) {
         flag = flag;
       else if (itype(x) <= LJ_TISTABUD) {
         // Different tables or userdatas. Need to check __eq metamethod.
-        vm_savepc(L);
+        vm_savepc(L, PC);
         TValue *res = lj_meta_equal(L, gcval(BASE+A), gcval(BASE+D), flag);
         if ((intptr_t)res != flag) {
           vm_call_cont(L, res, 2);
@@ -415,7 +415,7 @@ void execute(lua_State *L) {
     /* ISTYPE: assert A is of type -D. */
     TRACE("ISTYPE");
     if (~itype(BASE+A) != D) {
-      vm_savepc(L);
+      vm_savepc(L, PC);
       lj_meta_istype(L, A, D);
     }
     break;
@@ -432,7 +432,7 @@ void execute(lua_State *L) {
     break;
   case BC_UNM:
     /* UNM: Set A to -D (unary minus). */
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+D, BASE+D, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -450,7 +450,7 @@ void execute(lua_State *L) {
         /* Lua 5.1 does not support __len on tables. */
         setnumV(dst, lj_tab_len(tabV(o)));
       } else {
-        vm_savepc(L);
+        vm_savepc(L, PC);
         vm_call_cont(L, lj_meta_len(L, o), 1);
       }
     }
@@ -458,7 +458,7 @@ void execute(lua_State *L) {
   case BC_ADDVN:
     /* ADDVN: Add number constant C to B and store the result in A. */
     TRACE("ADDVN");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -467,7 +467,7 @@ void execute(lua_State *L) {
   case BC_SUBVN:
     /* SUBVN: Subtract number constant C from B and store the result in A. */
     TRACE("SUBVN");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -476,7 +476,7 @@ void execute(lua_State *L) {
   case BC_MULVN:
     /* MULVN: Multiply B by number constant C and store the result in A. */
     TRACE("MULVN");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -485,7 +485,7 @@ void execute(lua_State *L) {
   case BC_DIVVN:
     /* DIVVN: Divide B by number constant C and store the result in A. */
     TRACE("DIVVN");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -494,7 +494,7 @@ void execute(lua_State *L) {
   case BC_MODVN:
     /* MODVN: Calculate B modulo number constant C and store the result in A. */
     TRACE("MODVN");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, ktv(C), OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -503,7 +503,7 @@ void execute(lua_State *L) {
   case BC_ADDNV:
     /* ADDNV: Add B to number constant C and store the result in A. */
     TRACE("ADDNV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -512,7 +512,7 @@ void execute(lua_State *L) {
   case BC_SUBNV:
     /* SUBNV: Subtract B from number constant C and store the result in A. */
     TRACE("SUBNV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -521,7 +521,7 @@ void execute(lua_State *L) {
   case BC_MULNV:
     /* MULNV: Multiply number constant C by B and store the result in A. */
     TRACE("MULNV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -530,7 +530,7 @@ void execute(lua_State *L) {
   case BC_DIVNV:
     /* DIVNV: Divide number constant C by B and store the result in A. */
     TRACE("DIVNV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -539,7 +539,7 @@ void execute(lua_State *L) {
   case BC_MODNV:
     /* MODNV: Calculate number constant C modulo B and store the result in A. */
     TRACE("MODNV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, ktv(C), BASE+B, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -548,7 +548,7 @@ void execute(lua_State *L) {
   case BC_ADDVV:
     /* ADDVV: Add C to B and store the result in A. */
     TRACE("ADDVV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -557,7 +557,7 @@ void execute(lua_State *L) {
   case BC_SUBVV:
     /* SUBVV: Subtract C from B and store the result in A. */
     TRACE("SUBVV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -566,7 +566,7 @@ void execute(lua_State *L) {
   case BC_MULVV:
     /* MULVV: Multiply B by C and store the result in A. */
     TRACE("MULVV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -575,7 +575,7 @@ void execute(lua_State *L) {
   case BC_DIVVV:
     /* DIVVV: Divide B by C and store the result in A. */
     TRACE("DIVVV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -584,7 +584,7 @@ void execute(lua_State *L) {
   case BC_MODVV:
     /* MODVV: Calculate B modulo C and store the result in A. */
     TRACE("MODVV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -593,7 +593,7 @@ void execute(lua_State *L) {
   case BC_POW:
     /* POW: Calculate power C of B and store the result in A. */
     TRACE("POW");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_arith(L, BASE+A, BASE+B, BASE+C, OP);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -601,7 +601,7 @@ void execute(lua_State *L) {
     break;
   case BC_CAT:
     TRACE("CAT");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *mbase = lj_meta_cat(L, BASE+C, C-B);
       if (mbase) vm_call_cont(L, mbase, 2);
@@ -697,7 +697,7 @@ void execute(lua_State *L) {
     break;
   case BC_FNEW:
     TRACE("FNEW");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       GCproto *pt = kgcref(D, GCproto);
       GCfuncL *parent = &(funcV(BASE-2)->l);
@@ -707,7 +707,7 @@ void execute(lua_State *L) {
     break;
   case BC_TNEW:
     TRACE("TNEW");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     lj_gc_check(L);
     {
       uint32_t asize = D & ((1<<11)-1);
@@ -718,7 +718,7 @@ void execute(lua_State *L) {
     break;
   case BC_TDUP:
     TRACE("TDUP");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     lj_gc_check(L);
     {
       GCtab *tab = lj_tab_dup(L, kgcref(D, GCtab));
@@ -728,7 +728,7 @@ void execute(lua_State *L) {
   case BC_GGET:
     TRACE("GGET");
     /* A = _G[D] */
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       GCfunc *fn = funcV(BASE-2);
       TValue e, k;
@@ -745,7 +745,7 @@ void execute(lua_State *L) {
   case BC_GSET:
     /* _G[D] = A */
     TRACE("GSET");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       GCfunc *fn = funcV(BASE-2);
       TValue e, k, *v;
@@ -763,7 +763,7 @@ void execute(lua_State *L) {
   case BC_TGETV:
     /* TGETV: A = B[C] */
     TRACE("TGETV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       const TValue *v = lj_meta_tget(L, BASE+B, BASE+C);
       if (v)
@@ -775,7 +775,7 @@ void execute(lua_State *L) {
   case BC_TGETS:
     /* TGETS: A = B[C] where C is a string constant. */
     TRACE("TGETS");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue k;
       const TValue *v;
@@ -790,7 +790,7 @@ void execute(lua_State *L) {
   case BC_TGETB:
     /* TGETB: A = B[C] where C is a byte literal. */
     TRACE("TGETB");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue k;
       const TValue *v;
@@ -805,7 +805,7 @@ void execute(lua_State *L) {
   case BC_TGETR:  assert(0 && "NYI BYTECODE: TGETR");
   case BC_TSETV:
     TRACE("TSETV");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *v = lj_meta_tset(L, BASE+B, BASE+C);
       if (v) {
@@ -818,7 +818,7 @@ void execute(lua_State *L) {
     break;
   case BC_TSETS:
     TRACE("TSETS");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue k, *v;
       setgcVraw(&k, kgcref(C, GCobj), LJ_TSTR);
@@ -834,7 +834,7 @@ void execute(lua_State *L) {
   case BC_TSETB:
     /* TSETB: B[C] = A where C is an unsigned literal. */
     TRACE("TSETB");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue k, *v;
       k.n = C;
@@ -849,7 +849,7 @@ void execute(lua_State *L) {
     break;
   case BC_TSETM:
     TRACE("TSETM");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       int i = 0, ix = ktv(D)->u32.lo;
       TValue *o = BASE+A-1;
@@ -1031,7 +1031,7 @@ void execute(lua_State *L) {
   case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
   case BC_FORI:
     TRACE("FORI");
-    vm_savepc(L);
+    vm_savepc(L, PC);
     {
       TValue *state = BASE + A;
       TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
@@ -1430,7 +1430,7 @@ void execute(lua_State *L) {
       }
     case 0x96:
       TRACEFF("string.sub");
-      vm_savepc(L);
+      vm_savepc(L, PC);
       lj_gc_check(L);
       {
         if (NARGS < 2 || !tvisstr(BASE) || !tvisnum(BASE+1)
@@ -1456,7 +1456,7 @@ void execute(lua_State *L) {
       break;
     case 0x98:
       /* Fast function string operations. */
-      vm_savepc(L);
+      vm_savepc(L, PC);
       lj_gc_check(L);
       {
         if (!tvisstr(BASE))
@@ -1501,7 +1501,7 @@ static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp) 
   TValue *f = callbase-2;
   int delta = callbase - BASE;
   if (!tvisfunc(f)) {
-    vm_savepc(L);
+    vm_savepc(L, PC);
     lj_meta_call(L, f, callbase + _nargs);
     _nargs += 1;
     assert(KBASE != callbase && "NYI: vm_call __call in tailcall.");
@@ -1660,7 +1660,7 @@ int fff_fallback(lua_State *L) {
   TOP = BASE + NARGS;
   assert(TOP+1+LUA_MINSTACK <= mref(L->maxstack, TValue));
   lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
-  vm_savepc(L);
+  vm_savepc(L, PC);
   int res = (*f)(L);
   switch (res) {
   case -1: assert(0 && "NYI: fff_fallback tailcall");
@@ -1673,13 +1673,13 @@ int fff_fallback(lua_State *L) {
 
 /* -- Various auxiliary VM functions -------------------------------------- */
 
-/* Save the current PC to the active CFrame.
+/* Save a pc to the active CFrame.
  *
  * Note: this needs to be called before calling out to external functions that
  * can throw Lua errors in order for them to be able to produce error messages.
  */
-static inline void vm_savepc (lua_State *L) {
-  setcframe_pc(cframe_raw(L->cframe), PC);
+static inline void vm_savepc(lua_State *L, const BCIns *pc) {
+  setcframe_pc(cframe_raw(L->cframe), pc);
 }
 
 /* Helper tobit function for bitops.
