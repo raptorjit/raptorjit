@@ -1745,9 +1745,10 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
        * Return from call frame with the adjusted resultofs/nresults.
        */
       int delta = link>>3;
+      intptr_t nextlink = BASE[-delta-1].u64; /* Might be clobbered. */
       BASE -= delta; resultofs += delta;
       resultofs--; nresults++; setboolV(BASE+resultofs, 1);
-      return vm_return(L, BASE[-1].u64, resultofs, nresults);
+      return vm_return(L, nextlink, resultofs, nresults);
     }
     break;
   case FRAME_CONT:
