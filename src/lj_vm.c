@@ -1492,6 +1492,22 @@ void execute(lua_State *L) {
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
+    case 0x80:
+      TRACEFF("math.frexp");
+      if (NARGS >= 1 && tvisnum(BASE)) {
+        int n;
+        setnumV(BASE, frexp(numV(BASE), &n));
+        setnumV(BASE+1, n);
+        if (vm_return(L, BASE[-1].u64, 0, 2)) return;
+      } else if (fff_fallback(L)) return;
+      break;
+    case 0x81:
+      TRACEFF("math.modf");
+      if (NARGS >= 1 && tvisnum(BASE)) {
+        setnumV(BASE, modf(numV(BASE), &BASE[1].n));
+        if (vm_return(L, BASE[-1].u64, 0, 2)) return;
+      } else if (fff_fallback(L)) return;
+      break;
     case 0x82:
       TRACEFF("math.log");
       if (NARGS >= 1 && tvisnum(BASE)) {
