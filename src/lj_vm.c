@@ -1164,6 +1164,22 @@ void execute(lua_State *L) {
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
+    case 0x63:
+      TRACEFF("next");
+      if (NARGS >= 1 && tvistab(BASE)) {
+        if (NARGS < 2) setnilV(BASE+1);
+        TOP = BASE;
+        vm_savepc(L, (BCIns*)BASE[-1].u64);
+        if (lj_tab_next(L, tabV(BASE), BASE+1)) {
+          /* Copy key and value to results. */
+          if (vm_return(L, BASE[-1].u64, 1, 2)) return;
+        } else {
+          /* End of traversal: return nil. */
+          setnilV(BASE-2);
+          if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+        }
+      } else if (fff_fallback(L)) return;
+      break;
     case 0x64:
       TRACEFF("pairs");
       /* XXX - punt to fallback. */
