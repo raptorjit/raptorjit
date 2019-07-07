@@ -1867,7 +1867,15 @@ int fff_fallback(lua_State *L) {
   vm_savepc(L, PC);
   int res = (*f)(L);
   switch (res) {
-  case -1: assert(0 && "NYI: fff_fallback tailcall");
+  case -1:
+    if ((link & FRAME_TYPE) == FRAME_LUA) {
+      int delta = bc_a(*(BCIns*)link);
+      BASE -= delta+2;
+      vm_callt(L, delta, NARGS);
+    } else {
+      assert(0 && "NYI: fff_fallback tail call in VARG/C frame. ");
+    }
+    return 0;
   case  0: assert(0 && "NYI: fff_fallback retry");
   default: /* FFH_RES(n) */
     return vm_return(L, link, -2, res-1);
