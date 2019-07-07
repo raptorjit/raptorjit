@@ -1603,6 +1603,30 @@ void execute(lua_State *L) {
         if (fff_fallback(L)) return;
         break;
       }
+    case 0x94:
+      TRACEFF("string.byte");
+      if (NARGS >= 1 && tvisstr(BASE)
+          && (NARGS == 1 || tvisnum(BASE+1))
+          && (NARGS == 2 || tvisnum(BASE+2))) {
+        GCstr *str = strV(BASE);
+        int start = NARGS >= 2 ? numV(BASE+1) : 1;
+        int end = NARGS >= 3 ? numV(BASE+2) : 1;
+        int i, nresults;
+        if (start < 0)
+          start = max(start + str->len+1, 1);
+        else
+          start = max(min(start, str->len), 1);
+        if (end < 0)
+          end = max(end + str->len+1, 0);
+        else
+          end = min(end, str->len);
+        nresults = 1+end-start;
+        assert(BASE+nresults <= mref(L->maxstack, TValue));
+        for (i=0; i+start <= end; i++)
+          setnumV(BASE+i, strdata(str)[i+start-1]);
+        if (vm_return(L, BASE[-1].u64, 0, nresults)) return;
+      } else if (fff_fallback(L)) return;
+      break;
     case 0x96:
       TRACEFF("string.sub");
       vm_savepc(L, PC);
