@@ -48,6 +48,7 @@ static uint64_t insctr_tracefrom = UINT64_MAX;
 
 /* Forward declarations. */
 static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp);
+static inline void vm_callt(lua_State *L, int offset, int _nargs);
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 int fff_fallback(lua_State *L);
@@ -917,24 +918,7 @@ void execute(lua_State *L) {
     }
     {
       MULTRES = NARGS;
-      TValue *callbase = BASE+2+A;
-      intptr_t link = BASE[-1].u64;
-      // Copy function and arguments down into parent frame.
-      BASE[-2] = callbase[-2];
-      copyTVs(L, BASE, callbase, NARGS, NARGS);
-      assert(((BASE[-1].u64 & FRAME_TYPE) == FRAME_LUA
-              || (BASE[-1].u64 & FRAME_TYPEP) != FRAME_VARG)
-             && "NYI: CALLT from vararg function");
-      if (funcV(BASE-2)->l.ffid > FF_C)
-        /* Tailcall to a fast function. */
-        if ((link & FRAME_TYPE) != FRAME_LUA) {
-          /* Frame below is a C frame. Need to set constant pool address. */
-          GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
-          KBASE = mref(pt->k, void);
-        }
-      vm_call(L, BASE, NARGS, FRAME_LUA);
-      /* Replace frame link set by vm_call with parent link. */
-      BASE[-1].u64 = link;
+      vm_callt(L, A, NARGS);
     }
     break;
   case BC_ITERC:
@@ -1704,6 +1688,32 @@ static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp) 
   TOP = BASE + _nargs;
   BASE[-1].u64 = (ftp == FRAME_LUA) ? (intptr_t)PC : (delta << 3) + ftp;
   PC = mref(funcV(f)->l.pc, BCIns);
+}
+
+/* Perform a tailcall.
+ *
+ * Copies function and arguments at offset into current (parent) frame and
+ * performs call via vm_call.
+ */
+static inline void vm_callt(lua_State *L, int offset, int _nargs) {
+  TValue *callbase = BASE+2+offset;
+  uint64_t link = BASE[-1].u64;
+  // Copy function and arguments down into parent frame.
+  BASE[-2] = callbase[-2];
+  copyTVs(L, BASE, callbase, NARGS, NARGS);
+  assert(((BASE[-1].u64 & FRAME_TYPE) == FRAME_LUA
+          || (BASE[-1].u64 & FRAME_TYPEP) != FRAME_VARG)
+         && "NYI: CALLT from vararg function");
+  vm_call(L, BASE, NARGS, FRAME_LUA);
+  /* Replace frame link set by vm_call with parent link. */
+  BASE[-1].u64 = link;
+  /* Tailcall to a fast function? */
+  if (funcV(BASE-2)->l.ffid > FF_C)
+    if ((link & FRAME_TYPE) != FRAME_LUA) {
+      /* Frame below is a C frame. Need to set constant pool address. */
+      GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+      KBASE = mref(pt->k, void);
+    }
 }
 
 
