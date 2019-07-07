@@ -1148,17 +1148,13 @@ void execute(lua_State *L) {
     switch ((uint32_t)OP) {
     case 0x61:
       TRACEFF("assert");
-      {
-        if (tvistruecond(BASE)) {
-          if (vm_return(L, BASE[-1].u64, 0, NARGS)) return;
-        } else {
-          if (fff_fallback(L)) return;
-        }
-      }
+      if (NARGS >= 1 && tvistruecond(BASE)) {
+        if (vm_return(L, BASE[-1].u64, 0, NARGS)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x62:
       TRACEFF("type");
-      {
+      if (NARGS >= 1) {
         uint32_t type = itype(BASE);
         GCfuncC *f = &funcV(BASE-2)->c;
         if (type < LJ_TISNUM)
@@ -1166,7 +1162,7 @@ void execute(lua_State *L) {
         type = ~type;
         BASE[-2] = f->upvalue[type];
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      }
+      } else if (fff_fallback(L)) return;
       break;
     case 0x64:
       TRACEFF("pairs");
@@ -1175,14 +1171,10 @@ void execute(lua_State *L) {
       break;
     case 0x65:
       TRACEFF("ipairs_aux");
-      {
+      if (NARGS >= 2 && tvistab(BASE) && tvisnum(BASE+1)) {
         TValue *tab = BASE;
         TValue *i = BASE+1;
         const TValue *v;
-        if (!tvistab(tab) || !tvisnum(i)) {
-          if (fff_fallback(L)) return;
-          break;
-        }
         uint64_t link = BASE[-1].u64;
         /* Increment index. */
         uint32_t n = numV(i) + 1;
@@ -1203,7 +1195,7 @@ void execute(lua_State *L) {
         /* End of interator: return no values. */
       ipairs_end:
         if (vm_return(L, link, -2, 0)) return;
-      }
+      } else if (fff_fallback(L)) return;
       break;
     case 0x66:
       TRACEFF("ipairs");
@@ -1212,7 +1204,7 @@ void execute(lua_State *L) {
       break;
     case 0x67:
       TRACEFF("getmetatable");
-      {
+      if (NARGS > 0) {
         GCtab *mt;
         if (tvistab(BASE))
           mt = tabref(tabV(BASE)->metatable);
@@ -1227,7 +1219,7 @@ void execute(lua_State *L) {
           setnilV(BASE-2);
         }
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      }
+      } else if (fff_fallback(L)) return;
       break;
     case 0x68:
       TRACEFF("setmetatable");
@@ -1236,22 +1228,16 @@ void execute(lua_State *L) {
       break;
     case 0x6a:
       TRACEFF("tonumber");
-      {
-        if (NARGS != 1 || !tvisnumber(BASE)) {
-          if (fff_fallback(L)) return;
-        } else {
-          if (vm_return(L, BASE[-1].u64, 0, 1)) return;
-        }
-      }
+      if (NARGS == 1 && tvisnumber(BASE)) {
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x69:
       TRACEFF("rawget");
-      if (!tvistab(BASE)) {
-        if (fff_fallback(L)) return;
-      } else {
+      if (NARGS >= 2 && tvistab(BASE)) {
         copyTV(L, BASE, lj_tab_get(L, tabV(BASE), BASE+1));
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
-      }
+      } else if (fff_fallback(L)) return;
       break;
     case 0x6b:
       TRACEFF("tostring");
@@ -1260,7 +1246,7 @@ void execute(lua_State *L) {
       break;
     case 0x6c:
       TRACEFF("pcall");
-      {
+      if (NARGS >= 1) {
         /* First argument (BASE) is the function to call. */
         TValue *callbase = BASE+2;
         int hookflag = hook_active(G(L)) ? 1 : 0;
@@ -1269,21 +1255,20 @@ void execute(lua_State *L) {
         while (copyargs--)
           copyTV(L, callbase+copyargs, BASE+1+copyargs);
         vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
-      }
+      } else if (fff_fallback(L)) return;
       break;
     case 0x6d:
       TRACEFF("xpcall");
-      /* First argument (BASE) is the function to call, second argument
-         (BASE+1) is the handler. */
-      if (tvisfunc(BASE+1)) {
+      if (NARGS >= 2 && tvisfunc(BASE+1)) {
+        /* First argument (BASE) is the function to call, second argument
+           (BASE+1) is the handler. */
         TValue f;
         TValue *callbase = BASE+3;
         int hookflag = hook_active(G(L)) ? 1 : 0;
         /* Swap function and handler. */
         f = BASE[0]; BASE[0] = BASE[1]; BASE[1] = f;
         vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     /*
      * -- Resuming and yielding from coroutines ---------------------------
@@ -1351,7 +1336,7 @@ void execute(lua_State *L) {
         TValue *rbase, *rtop;
         if (OP == 0x6f) {
           /* resume: first argument must be a thread (the coroutine object). */
-          if (tvisthread(BASE))
+          if (NARGS >= 1 && tvisthread(BASE))
             co = threadV(BASE);
           else
             goto resume_fallback;
@@ -1430,103 +1415,91 @@ void execute(lua_State *L) {
       }
     case 0x71:
       TRACEFF("math.abs");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, BASE->n < 0 ? -1*BASE->n : BASE->n);
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x72:
       TRACEFF("math.floor");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, lj_vm_floor(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x73:
       TRACEFF("math.ceil");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, lj_vm_ceil(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x74:
       TRACEFF("math.sqrt");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, sqrt(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x75:
       TRACEFF("math.log10");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, log10(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x76:
       TRACEFF("math.exp");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, exp(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x77:
       TRACEFF("math.sin");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, sin(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x78:
       TRACEFF("math.cos");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, cos(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x79:
       TRACEFF("math.tan");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, cos(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x82:
       TRACEFF("math.log");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, log(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x83:
       TRACEFF("math.atan2");
-      if (tvisnum(BASE) && tvisnum(BASE+1)) {
+      if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         setnumV(BASE-2, atan2(numV(BASE), numV(BASE+1)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x86:
       TRACEFF("math.ldexp");
-      if (tvisnum(BASE) && tvisnum(BASE+1)) {
+      if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         setnumV(BASE-2, ldexp(numV(BASE), numV(BASE+1)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x87:
       TRACEFF("math.min");
-      if (!tvisnum(BASE))
+      if (NARGS < 1 || !tvisnum(BASE))
         goto min_fallback;
       while (NARGS-- > 1) {
         if (!tvisnum(BASE+NARGS)) goto min_fallback;
@@ -1539,7 +1512,7 @@ void execute(lua_State *L) {
       break;
     case 0x88:
       TRACEFF("math.max");
-      if (!tvisnum(BASE))
+      if (NARGS < 1 || !tvisnum(BASE))
         goto max_fallback;
       while (NARGS-- > 1) {
         if (!tvisnum(BASE+NARGS)) goto max_fallback;
@@ -1552,24 +1525,22 @@ void execute(lua_State *L) {
       break;
     case 0x89:
       TRACEFF("bit.tobit");
-      if (tvisnum(BASE)) {
+      if (NARGS >= 1 && tvisnum(BASE)) {
         BASE->n = tobit(BASE);
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x8c:
       TRACEFF("bit.lshift");
-      if (tvisnum(BASE) && tvisnum(BASE+1)) {
+      if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         BASE->n = tobit(BASE) << tobit(BASE+1);
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
-      } else
-        if (fff_fallback(L)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x91:
       TRACEFF("bit.band");
       {
-        if (!tvisnum(BASE))
+        if (NARGS < 1 || !tvisnum(BASE))
           goto band_fallback;
         int32_t res = tobit(BASE);
         while (NARGS-- > 1) {
@@ -1586,7 +1557,7 @@ void execute(lua_State *L) {
     case 0x93:
       TRACEFF("bit.bxor");
       {
-        if (!tvisnum(BASE))
+        if (NARGS < 1 || !tvisnum(BASE))
           goto bxor_fallback;
         int32_t res = tobit(BASE);
         while (NARGS-- > 1) {
@@ -1604,12 +1575,8 @@ void execute(lua_State *L) {
       TRACEFF("string.sub");
       vm_savepc(L, PC);
       lj_gc_check(L);
-      {
-        if (NARGS < 2 || !tvisstr(BASE) || !tvisnum(BASE+1)
-            || (NARGS > 2 && !tvisnum(BASE+2))) {
-          if (fff_fallback(L)) return;
-          break;
-        }
+      if (NARGS >= 2 && tvisstr(BASE) && tvisnum(BASE+1)
+          && (NARGS == 2 || tvisnum(BASE+2))) {
         GCstr *str = strV(BASE);
         int start = numV(BASE+1);
         int end = NARGS > 2 ? numV(BASE+2) : -1;
@@ -1624,15 +1591,13 @@ void execute(lua_State *L) {
         str = lj_str_new(L, strdata(str)+start-1, max(1+end-start, 0));
         setgcVraw(BASE-2, (GCobj *)str, LJ_TSTR);
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
-      }
+      } else if (fff_fallback(L)) return;
       break;
     case 0x98:
       /* Fast function string operations. */
       vm_savepc(L, PC);
       lj_gc_check(L);
-      {
-        if (!tvisstr(BASE))
-          if (fff_fallback(L)) return;
+      if (NARGS >= 1 && tvisstr(BASE)) {
         GCstr *str = strV(BASE);
         SBuf *buf = &G(L)->tmpbuf;
         buf->L = L;
@@ -1646,7 +1611,7 @@ void execute(lua_State *L) {
         }
         setgcVraw(BASE, (GCobj *)lj_buf_tostr(buf), LJ_TSTR);
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
-      }
+      } else if (fff_fallback(L)) return;
       break;
     default: assert(0 && "INVALID BYTECODE");
     }
