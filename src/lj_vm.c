@@ -1386,11 +1386,13 @@ void execute(lua_State *L) {
           co->top = rtop;
         /* Save caller PC. */
         vm_savepc(L, (BCIns*)BASE[-1].u64);
+        /* Clear arguments from stack. */
+        TOP = BASE;
         if (OP == 0x6f)
           /* resume: keep resumed thread in parent stack for GC. */
-          TOP = ++BASE;
+          TOP += 1;
         /* Copy arguments. resume: -1 for `co' */
-        copyTVs(L, rbase, BASE, rtop-rbase, NARGS - (OP == 0x6f));
+        copyTVs(L, rbase, TOP, rtop-rbase, NARGS - (OP == 0x6f));
         /* Resume coroutine at rbase. */
         lj_vm_resume(co, rbase, 0, 0);
         /* Reference the now-current lua_State. */
@@ -1402,12 +1404,11 @@ void execute(lua_State *L) {
           /* Clear coroutine stack. */
           co->top = co->base;
           /* Ensure we have stack space for coroutine results. */
-          assert(BASE+nresults <= mref(L->maxstack, TValue));
+          assert(TOP+nresults <= mref(L->maxstack, TValue));
           /* Copy coroutine results */
-          copyTVs(L, BASE, co->base, nresults, nresults);
+          copyTVs(L, TOP, co->base, nresults, nresults);
           if (OP==0x6f) {
-            /* resume: undo BASE adjustment, prepend true to results. */
-            BASE -= 1;
+            /* resume: prepend true to results. */
             setboolV(BASE, 1);
             nresults += 1;
           }
@@ -1419,8 +1420,6 @@ void execute(lua_State *L) {
             lj_ffh_coroutine_wrap_err(L, co);
           /* resume: catch the error. */
           co->top -= 1; /* Clear error from coroutine stack. */
-          /* Undo BASE adjustment. */
-          BASE -= 1;
           /* Return (false, <error>) */
           setboolV(BASE, 0);
           copyTV(L, BASE+1, co->top);
