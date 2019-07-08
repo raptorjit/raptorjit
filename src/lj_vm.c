@@ -825,7 +825,11 @@ void execute(lua_State *L) {
         vm_call_cont(L, TOP, 2);
     }
     break;
-  case BC_TGETR:  assert(0 && "NYI BYTECODE: TGETR");
+  case BC_TGETR:
+    /* TGETR: A = B[C]  (__index is ignored). */
+    TRACE("TGETR");
+    copyTV(L, BASE+A, lj_tab_getint(tabV(BASE+B), (int32_t)numV(BASE+C)));
+    break;
   case BC_TSETV:
     TRACE("TSETV");
     vm_savepc(L, PC);
@@ -884,7 +888,12 @@ void execute(lua_State *L) {
       lj_gc_anybarriert(L, tab);
     }
     break;
-  case BC_TSETR:  assert(0 && "NYI BYTECODE: TSETR");
+  case BC_TSETR:
+    /* TGETR: B[C] = A (__newindex is ignored.) */
+    TRACE("TSETR");
+    vm_savepc(L, PC);
+    copyTV(L, lj_tab_setint(L, tabV(BASE+B), (int32_t)numV(BASE+C)), BASE+A);
+    break;
   case BC_CALLM: case BC_CALL:
     if (OP == BC_CALLM) {
       /* CALLM: A = newbase, B = nresults+1, C = extra_nargs */
