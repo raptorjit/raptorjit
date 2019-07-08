@@ -1698,6 +1698,7 @@ void execute(lua_State *L) {
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
+    case 0x97:
     case 0x98:
     case 0x99:
       /* Fast function string operations. */
@@ -1709,6 +1710,10 @@ void execute(lua_State *L) {
         buf->L = L;
         buf->p = buf->b;
         switch ((uint32_t)OP) {
+        case 0x97:
+          TRACEFF("string.reverse");
+          lj_buf_putstr_reverse(buf, str);
+          break;
         case 0x98:
           TRACEFF("string.lower");
           lj_buf_putstr_lower(buf, str);
