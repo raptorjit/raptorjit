@@ -55,8 +55,11 @@ do --- math
 end
 
 do --- pre-5.2 math +lua<5.2 -compat5.2
-  assert(math.mod)
   assert(math.log10)
+end
+
+do --- pre-5.2 math +lua<5.2 -compat5.2 -luajit
+   assert(math.mod)
 end
 
 do --- 5.2 math +lua>=5.2
@@ -68,7 +71,7 @@ do --- string
   check(string, "byte:char:dump:find:format:gmatch:gsub:len:lower:match:rep:reverse:sub:upper", "gfind")
 end
 
-do --- pre-5.2 string +lua<5.2 -compat5.2
+do --- pre-5.2 string +lua<5.2 -compat5.2 -luajit
   assert(string.gfind)
 end
 
