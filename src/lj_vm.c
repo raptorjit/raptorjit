@@ -1671,6 +1671,11 @@ void execute(lua_State *L) {
         if (vm_return(L, BASE[-1].u64, 0, nresults)) return;
       } else if (fff_fallback(L)) return;
       break;
+    case 0x95:
+      TRACEFF("string.char");
+      /* XXX - punt to fallback. */
+      fff_fallback(L);
+      break;
     case 0x96:
       TRACEFF("string.sub");
       vm_savepc(L, PC);
