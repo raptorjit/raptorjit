@@ -437,7 +437,14 @@ void execute(lua_State *L) {
       lj_meta_istype(L, A, D);
     }
     break;
-  case BC_ISNUM:  assert(0 && "NYI BYTECODE: ISNUM");
+  case BC_ISNUM:
+    /* ISNUM: assert A is a number. */
+    TRACE("ISNUM");
+    if (!tvisnum(BASE+A)) {
+      vm_savepc(L, PC);
+      lj_meta_istype(L, A, D);
+    }
+    break;
   case BC_MOV:
     TRACE("MOV");
     /* MOV: A = dst; D = src */
