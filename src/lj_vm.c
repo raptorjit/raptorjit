@@ -1862,13 +1862,13 @@ int fff_fallback(lua_State *L) {
   TOP = BASE + NARGS;
   assert(TOP+1+LUA_MINSTACK <= mref(L->maxstack, TValue));
   lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
-  vm_savepc(L, PC);
   int res = (*f)(L);
   switch (res) {
-  case -1:
+  case -1: /* FFH_TAILCALL */
     if ((link & FRAME_TYPE) == FRAME_LUA) {
       int delta = bc_a(*(BCIns*)link);
       BASE -= delta+2;
+      PC = (BCIns*)BASE[-1].u64; /* Reset PC for debug_framepc(). */
       vm_callt(L, delta, NARGS);
     } else {
       assert(0 && "NYI: fff_fallback tail call in VARG/C frame. ");
