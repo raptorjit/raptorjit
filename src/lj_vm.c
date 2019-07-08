@@ -1699,6 +1699,7 @@ void execute(lua_State *L) {
       } else if (fff_fallback(L)) return;
       break;
     case 0x98:
+    case 0x99:
       /* Fast function string operations. */
       vm_savepc(L, PC);
       lj_gc_check(L);
@@ -1711,6 +1712,10 @@ void execute(lua_State *L) {
         case 0x98:
           TRACEFF("string.lower");
           lj_buf_putstr_lower(buf, str);
+          break;
+        case 0x99:
+          TRACEFF("string.upper");
+          lj_buf_putstr_upper(buf, str);
           break;
         default: assert(0 && "NYI: fast string operation");
         }
