@@ -1,5 +1,5 @@
 
-do --- get __metatable +compat5.2
+do --- get __metatable
   local t = setmetatable({}, { __metatable = "foo" })
   for i=1,100 do assert(getmetatable(t) == "foo") end
 end
@@ -11,7 +11,7 @@ do --- jit smoke
   for i=1,100 do assert(setmetatable(t, mt) == t) end
 end
 
-do --- jit assorted +compat5.2
+do --- jit assorted
   local mt = {}
   local t = {}
   for i=1,200 do t[i] = setmetatable({}, mt) end
