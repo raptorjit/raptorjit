@@ -432,7 +432,7 @@ void execute(lua_State *L) {
   case BC_ISTYPE:
     /* ISTYPE: assert A is of type -D. */
     TRACE("ISTYPE");
-    if (~itype(BASE+A) != D) {
+    if (itype(BASE+A) != -D) {
       vm_savepc(L, PC);
       lj_meta_istype(L, A, D);
     }
