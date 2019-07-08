@@ -1940,7 +1940,7 @@ int fff_fallback(lua_State *L) {
     PC--; /* Retry the operation. */
     return 0;
   default: /* FFH_RES(n) */
-    return vm_return(L, link, -2, res-1);
+    return vm_return(L, link, -2, res-1); /* res is number of results + 1 */
   }
 }
 
