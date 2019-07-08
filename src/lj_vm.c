@@ -1609,7 +1609,7 @@ void execute(lua_State *L) {
           && (NARGS == 2 || tvisnum(BASE+2))) {
         GCstr *str = strV(BASE);
         int start = NARGS >= 2 ? numV(BASE+1) : 1;
-        int end = NARGS >= 3 ? numV(BASE+2) : 1;
+        int end = NARGS >= 3 ? numV(BASE+2) : start;
         int i, nresults;
         if (start < 0)
           start = max(start + str->len+1, 1);
