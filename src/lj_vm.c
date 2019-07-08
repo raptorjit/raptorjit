@@ -692,6 +692,7 @@ void execute(lua_State *L) {
     break;
   case BC_USETN:
     /* USETN: Set upvalue A to number constant D. */
+    TRACE("USETN");
     {
       GCfuncL *parent = &(funcV(BASE-2)->l);
       GCupval *uv = &parent->uvptr[A]->uv;
@@ -701,12 +702,12 @@ void execute(lua_State *L) {
     break;
   case BC_USETP:
     /* USETP: Set upvalue A to primitive D. */
+    TRACE("USETP");
     {
       GCfuncL *parent = &(funcV(BASE-2)->l);
       GCupval *uv = &parent->uvptr[A]->uv;
       TValue *v = (TValue *)uv->v;
       setpriV(v, ~D);
-      copyTV(L, v, ktv(D));
     }
     break;
   case BC_UCLO:
