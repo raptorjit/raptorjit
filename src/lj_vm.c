@@ -1580,6 +1580,22 @@ void execute(lua_State *L) {
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
+    case 0x8f:
+      TRACEFF("bit.rol");
+      if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
+        uint32_t b = tobit(BASE), n = (uint32_t)tobit(BASE+1) & 31;
+        BASE->n = (int32_t)((b << n) | (b >> (32-n)));
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
+      break;
+    case 0x90:
+      TRACEFF("bit.ror");
+      if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
+        uint32_t b = tobit(BASE), n = (uint32_t)tobit(BASE+1) & 31;
+        BASE->n = (int32_t)((b << (32-n)) | (b >> n));
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
+      break;
     case 0x91:
       TRACEFF("bit.band");
       {
