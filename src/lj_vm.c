@@ -2100,7 +2100,7 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   STATE = ~LJ_VMST_INTERP;
   if (L->status == LUA_OK) {
     /* Initial resume (like a call). */
-    vm_call(L, newbase, newbase-BASE-2, FRAME_CP);
+    vm_call(L, newbase, TOP-newbase, FRAME_CP);
   } else {
     /* Resume after yield (like a return). */
     L->status = LUA_OK;
