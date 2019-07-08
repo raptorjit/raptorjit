@@ -1566,6 +1566,13 @@ void execute(lua_State *L) {
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
+    case 0x8d:
+      TRACEFF("bit.rshift");
+      if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
+        BASE->n = (int32_t)((uint32_t)tobit(BASE) >> tobit(BASE+1));
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
+      break;
     case 0x91:
       TRACEFF("bit.band");
       {
