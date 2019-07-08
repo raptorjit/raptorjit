@@ -1215,7 +1215,10 @@ void execute(lua_State *L) {
           mt = tabref(basemt_obj(G(L), BASE));
         if (mt) {
           cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), MM_metatable));
-          setgcVraw(BASE-2, (GCobj*)(mo ? (GCtab*)mo : mt), LJ_TTAB);
+          if (mo)
+            copyTV(L, BASE-2, mo);
+          else
+            setgcVraw(BASE-2, (GCobj*)mt, LJ_TTAB);
         } else {
           setnilV(BASE-2);
         }
