@@ -1364,8 +1364,7 @@ void execute(lua_State *L) {
           /* wrap_aux: get thread from caller upvalue. */
           co = threadV(&funcV(BASE-2)->c.upvalue[0]);
         }
-        /* The thread must not have a CFrame attached. (This is where we will
-           store a reference to the resuming lua_State?) */
+        /* The thread must not have a CFrame attached. */
         if (co->cframe)
           goto resume_fallback;
         /* The thread's status must be either LUA_OK or LUA_YIELD. */
