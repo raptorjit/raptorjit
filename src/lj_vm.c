@@ -1914,7 +1914,7 @@ static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs) {
  * This can not just use vm_return and needs a special handler because ASM fast
  * functions are peculiar in multiple ways:
  *  - they use the stack space BASE-2..BASE+NARGS
- *  - they can yield to retries and tailcalls (NYI)
+ *  - they can yield to retries and tailcalls
  *
  * Returns the value of vm_return, potentially signaling the caller to return
  * to a C frame.
@@ -1936,7 +1936,9 @@ int fff_fallback(lua_State *L) {
       assert(0 && "NYI: fff_fallback tail call in VARG/C frame. ");
     }
     return 0;
-  case  0: assert(0 && "NYI: fff_fallback retry");
+  case  0: /* FFH_RETRY */
+    PC--; /* Retry the operation. */
+    return 0;
   default: /* FFH_RES(n) */
     return vm_return(L, link, -2, res-1);
   }
