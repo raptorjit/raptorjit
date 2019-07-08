@@ -1664,7 +1664,7 @@ void execute(lua_State *L) {
           end = max(end + str->len+1, 0);
         else
           end = min(end, str->len);
-        nresults = 1+end-start;
+        nresults = max(1+end-start, 0);
         assert(BASE+nresults <= mref(L->maxstack, TValue));
         for (i=0; i+start <= end; i++)
           setnumV(BASE+i, strdata(str)[i+start-1]);
