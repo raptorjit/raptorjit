@@ -1924,6 +1924,7 @@ int fff_fallback(lua_State *L) {
   TOP = BASE + NARGS;
   assert(TOP+1+LUA_MINSTACK <= mref(L->maxstack, TValue));
   lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
+  vm_savepc(L, (BCIns*)link);
   int res = (*f)(L);
   switch (res) {
   case -1: /* FFH_TAILCALL */
@@ -1933,7 +1934,7 @@ int fff_fallback(lua_State *L) {
       PC = (BCIns*)BASE[-1].u64; /* Reset PC for debug_framepc(). */
       vm_callt(L, delta, NARGS);
     } else {
-      assert(0 && "NYI: fff_fallback tail call in VARG/C frame. ");
+      assert(0 && "NYI: fff_fallback tail call in non-Lua frame.");
     }
     return 0;
   case  0: /* FFH_RETRY */
