@@ -1400,13 +1400,14 @@ void execute(lua_State *L) {
         /* Handle result depending in co->status. */
         if (co->status <= LUA_YIELD) {
           /* Coroutine yielded with results. */
-          int nresults = co->top - co->base;
+          int resultofs = (co->status == LUA_OK); // Skip true from FRAME_CP?
+          int nresults = co->top - (co->base+resultofs);
           /* Clear coroutine stack. */
           co->top = co->base;
           /* Ensure we have stack space for coroutine results. */
           assert(TOP+nresults <= mref(L->maxstack, TValue));
           /* Copy coroutine results */
-          copyTVs(L, TOP, co->base, nresults, nresults);
+          copyTVs(L, TOP, (co->base+resultofs), nresults, nresults);
           if (OP==0x6f) {
             /* resume: prepend true to results. */
             setboolV(BASE, 1);
