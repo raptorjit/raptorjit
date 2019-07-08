@@ -54,7 +54,6 @@ static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 int fff_fallback(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline void vm_savepc(lua_State *L, const BCIns *pc);
-static inline void vm_restorepc(lua_State *L);
 static inline int32_t tobit(TValue *num);
 /* From lib_base.c: */
 void lj_ffh_coroutine_wrap_err(lua_State *L, lua_State *co);
@@ -1373,9 +1372,7 @@ void execute(lua_State *L) {
         /* Copy arguments. resume: -1 for `co' */
         copyTVs(L, rbase, BASE, rtop-rbase, NARGS - (OP == 0x6f));
         /* Resume coroutine at rbase. */
-        vm_savepc(L, PC);
         lj_vm_resume(co, rbase, 0, 0);
-        vm_restorepc(L);
         /* Reference the now-current lua_State. */
         setgcref(G(L)->cur_L, obj2gco(L));
         /* Handle result depending in co->status. */
@@ -1894,11 +1891,6 @@ static inline void vm_savepc(lua_State *L, const BCIns *pc) {
   setcframe_pc(cframe_raw(L->cframe), pc);
 }
 
-/* Restore saved PC from current CFrame. */
-static inline void vm_restorepc(lua_State *L) {
-  PC = cframe_pc(cframe_raw(L->cframe));
-}
-
 /* Helper tobit function for bitops.
  *
  * Takes a Lua number `n' and produces a signed integer in the 32-bit result
@@ -1917,8 +1909,7 @@ static inline int32_t tobit(TValue *n) {
 int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
 {
   int res;
-  /* Save PC if the thread is active. */
-  if (L->cframe) vm_savepc(L, PC);
+  const BCIns *oldpc = PC;
   /* Add new CFrame to the chain. */
   CFrame cf = { L->cframe, L, nres };
   L->cframe = &cf;
@@ -1939,7 +1930,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   /* Unlink C frame. */
   L->cframe = cf.previous;
   /* Restore PC. */
-  if (L->cframe) vm_restorepc(L);
+  PC = oldpc;
   /* XXX */
   return LUA_OK;
 }
@@ -1959,11 +1950,10 @@ int lj_vm_pcall(lua_State *L, TValue *newbase, int nres, ptrdiff_t ef)  {
 /* Call a C function with a protected (error-handling) stack frame. */
 int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) { 
   int res;
+  const BCIns *oldpc = PC;
   TValue *newbase = NULL;
   /* "Neg. delta means cframe w/o frame." */
   int nresults = -savestack(L, L->top);
-  /* Save PC if the thread is active. */
-  if (L->cframe) vm_savepc(L, PC);
   /* Add to CFrame chain. */
   CFrame cf = { L->cframe, L, nresults };
   L->cframe = &cf;
@@ -1985,21 +1975,22 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
     }
   } else {
     /* Catch */
-    if (L->cframe) vm_restorepc(L);
+    PC = oldpc;
     return res;
   }
   /* Unlink C frame. */
-  L->cframe = L->cframe->previous;
-  if (L->cframe) vm_restorepc(L);
+  L->cframe = cf.previous;
+  PC = oldpc;
   return LUA_OK;
 }
 
 /* Resume coroutine, see ASM fast functions resume and yield.
  *
- * Note: caller must save/restore PC, nres1 is ignored.
+ * Note: nres1 is ignored, ef NYI.
  */
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   int res;
+  const BCIns *oldpc = PC;
   /* Set CFrame. (Note: this frame is unlinked by yield.) */
   CFrame cf = { 0, L };
   setmref(L->cframe, (intptr_t)&cf + CFRAME_RESUME);
@@ -2023,6 +2014,8 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   else
     /* Catch */
     L->status = res;
+  /* Restore PC. */
+  PC = oldpc;
   return L->status;
 }
 
