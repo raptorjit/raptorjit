@@ -1409,6 +1409,7 @@ void execute(lua_State *L) {
             /* resume: undo BASE adjustment, prepend true to results. */
             BASE -= 1;
             setboolV(BASE, 1);
+            nresults += 1;
           }
           vm_return(L, BASE[-1].u64, 0, nresults);
         } else {
