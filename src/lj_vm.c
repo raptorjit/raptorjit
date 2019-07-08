@@ -7,6 +7,7 @@
 #include <setjmp.h>
 #include <stdio.h>
 #include <math.h>
+#include <byteswap.h>
 
 #include "lj_bc.h"
 #include "lj_ccall.h"
@@ -1541,6 +1542,20 @@ void execute(lua_State *L) {
       TRACEFF("bit.tobit");
       if (NARGS >= 1 && tvisnum(BASE)) {
         BASE->n = tobit(BASE);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
+      break;
+    case 0x8a:
+      TRACEFF("bit.bnot");
+      if (NARGS >= 1 && tvisnum(BASE)) {
+        BASE->n = ~tobit(BASE);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
+      break;
+    case 0x8b:
+      TRACEFF("bit.bswap");
+      if (NARGS >= 1 && tvisnum(BASE)) {
+        BASE->n = (int32_t)bswap_32((uint32_t)tobit(BASE));
         if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
