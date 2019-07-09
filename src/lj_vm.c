@@ -1401,17 +1401,16 @@ void execute(lua_State *L) {
         lj_vm_resume(co, rbase, 0, 0);
         /* Reference the now-current lua_State. */
         setgcref(G(L)->cur_L, obj2gco(L));
-        /* Handle result depending in co->status. */
+        /* Handle result depending on co->status. */
         if (co->status <= LUA_YIELD) {
           /* Coroutine yielded with results. */
-          int resultofs = (co->status == LUA_OK); // Skip true from FRAME_CP?
-          int nresults = co->top - (co->base+resultofs);
+          int nresults = co->top - co->base;
           /* Clear coroutine stack. */
           co->top = co->base;
           /* Ensure we have stack space for coroutine results. */
           assert(TOP+nresults <= mref(L->maxstack, TValue));
           /* Copy coroutine results */
-          copyTVs(L, TOP, (co->base+resultofs), nresults, nresults);
+          copyTVs(L, TOP, co->base, nresults, nresults);
           if (OP==0x6f) {
             /* resume: prepend true to results. */
             setboolV(BASE, 1);
@@ -1838,7 +1837,7 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
       TValue *dst = BASE + resultofs;
       STATE = ~LJ_VMST_C;
       /* Push TRUE for successful return from a pcall.  */
-      if (link & FRAME_P) {
+      if ((link & FRAME_P) && !resume) {
         setboolV(--dst, 1);
         nresults += 1;
       }
