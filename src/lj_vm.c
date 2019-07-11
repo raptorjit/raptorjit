@@ -1909,19 +1909,27 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
        *  | <cont> |  <pc>  |<metamethod>| <link> | <arg1> |   ...
        */
       GCproto *pt;
-      void (*cont)(void);
+      void (*cont)(void) = contptr(BASE[-4].u64);
       int delta = link>>3;
       PC = mref(BASE[-3].u64, BCIns);
-      cont = contptr(BASE[-4].u64);
-      CONT_L = L;
-      CONT_BASE = BASE;
-      CONT_OFS = resultofs;
-      MULTRES = nresults;
       BASE -= delta;
-      pt = funcproto(funcV(BASE-2));
-      TOP = BASE + pt->framesize;
-      KBASE = mref(pt->k, void);
-      (*cont)();
+      if ((intptr_t)cont == LJ_CONT_TAILCALL) {
+        /* Tail call from C function. */
+        vm_callt(L, -2, NARGS);
+      } else if ((intptr_t)cont == LJ_CONT_FFI_CALLBACK) {
+        /* Return from FFI callback. */
+        assert(0 && "NYI: vm_return from FFI callback.");
+      } else {
+        /* Call continuation. */
+        CONT_L = L;
+        CONT_BASE = BASE+delta;
+        CONT_OFS = resultofs;
+        MULTRES = nresults;
+        pt = funcproto(funcV(BASE-2));
+        TOP = BASE + pt->framesize;
+        KBASE = mref(pt->k, void);
+        (*cont)();
+      }
       return 0;
     }
     break;
