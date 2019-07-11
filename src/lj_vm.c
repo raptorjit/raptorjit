@@ -265,7 +265,7 @@ void execute(lua_State *L) {
     /* ISGT: Take following JMP instruction if A > D. */
     if (OP == BC_ISGT) TRACE("ISGT");
     {
-      int flag;
+      int flag = 0;
       if (tvisnum(BASE+A) && tvisnum(BASE+D)) {
         double x = BASE[A].n, y = BASE[D].n;
         /* Compare two floats.
