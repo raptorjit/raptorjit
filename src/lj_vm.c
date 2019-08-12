@@ -1830,18 +1830,12 @@ static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
   case FRAME_C:
     /* Returning from the VM to C code. */
     {
-      CFrame *cf = L->cframe;
-      int resume = (intptr_t) cf & CFRAME_RESUME;
-      int nexpected = cframe_nres(cframe_raw(cf));
+      CFrame *cf = cframe_raw(L->cframe);
+      int nexpected = cf->nresults;
       int delta = link>>3;
       TValue *dst = BASE + resultofs;
       STATE = ~LJ_VMST_C;
-      /* Push TRUE for successful return from a pcall.  */
-      if ((link & FRAME_P) && !resume) {
-        setboolV(--dst, 1);
-        nresults += 1;
-      }
-      if ((nexpected < 0) || resume) // Return all results.
+      if (nexpected < 0) // Return all results.
         MULTRES = nexpected = nresults;
       /* Copy results into caller frame */
       dst = copyTVs(L, BASE-2, dst, nexpected, nresults);
@@ -2104,7 +2098,7 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   int res;
   const BCIns *oldpc = PC;
   /* Set CFrame. (Note: this frame is unlinked by yield.) */
-  CFrame cf = { 0, L };
+  CFrame cf = { 0, L, -1 };
   setmref(L->cframe, (intptr_t)&cf + CFRAME_RESUME);
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
