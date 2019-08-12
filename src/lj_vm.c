@@ -2030,7 +2030,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
     execute(L);
   } else {
     /* Catch */
-    assert(0 && "NYI: Catch exception from Lua call");
+    return res;
   }
   /* Unlink C frame. */
   L->cframe = cf.previous;
