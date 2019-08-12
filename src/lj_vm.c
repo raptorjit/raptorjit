@@ -1795,12 +1795,14 @@ static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp) 
 static inline void vm_callt(lua_State *L, int offset, int _nargs) {
   TValue *callbase = BASE+2+offset;
   uint64_t link = BASE[-1].u64;
+  if ((link & FRAME_TYPEP) == FRAME_VARG) {
+    /* Frame below is a VARG frame, relocate BASE. */
+    BASE -= link >> 3;
+    link = BASE[-1].u64;
+  }
   // Copy function and arguments down into parent frame.
   BASE[-2] = callbase[-2];
   copyTVs(L, BASE, callbase, NARGS, NARGS);
-  assert(((BASE[-1].u64 & FRAME_TYPE) == FRAME_LUA
-          || (BASE[-1].u64 & FRAME_TYPEP) != FRAME_VARG)
-         && "NYI: CALLT from vararg function");
   vm_call(L, BASE, NARGS, FRAME_LUA);
   /* Replace frame link set by vm_call with parent link. */
   BASE[-1].u64 = link;
