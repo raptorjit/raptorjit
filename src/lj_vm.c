@@ -1419,15 +1419,17 @@ void execute(lua_State *L) {
           vm_return(L, BASE[-1].u64, 0, nresults);
         } else {
           /* Coroutine returned with error (at co->top-1). */
-          if (OP == 0x70)
+          if (OP == 0x70) {
             /* wrap_aux: throw error. */
             lj_ffh_coroutine_wrap_err(L, co);
-          /* resume: catch the error. */
-          co->top -= 1; /* Clear error from coroutine stack. */
-          /* Return (false, <error>) */
-          setboolV(BASE, 0);
-          copyTV(L, BASE+1, co->top);
-          if (vm_return(L, BASE[-1].u64, 0, 2)) return;
+          } else {
+            /* resume: catch the error. */
+            co->top -= 1; /* Clear error from coroutine stack. */
+            /* Return (false, <error>) */
+            setboolV(BASE, 0);
+            copyTV(L, BASE+1, co->top);
+            if (vm_return(L, BASE[-1].u64, 0, 2)) return;
+          }
         }
         break;
       resume_fallback:
