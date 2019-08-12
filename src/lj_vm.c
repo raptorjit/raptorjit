@@ -2015,7 +2015,6 @@ static inline int32_t tobit(TValue *n) {
 int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
 {
   int res;
-  const BCIns *oldpc = PC;
   /* Add new CFrame to the chain. */
   CFrame cf = { L->cframe, L, nres };
   L->cframe = &cf;
@@ -2035,9 +2034,6 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   }
   /* Unlink C frame. */
   L->cframe = cf.previous;
-  /* Restore PC. */
-  PC = oldpc;
-  /* XXX */
   return LUA_OK;
 }
 
