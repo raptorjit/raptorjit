@@ -21,6 +21,7 @@
 #include "lj_meta.h"
 #include "lj_func.h"
 #include "lj_buf.h"
+#include "lj_trace.h"
 
 /* Count of executed instructions for debugger prosperity. */
 static uint64_t insctr;
@@ -53,6 +54,7 @@ static inline void vm_callt(lua_State *L, int offset, int _nargs);
 static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 static void fff_fallback(lua_State *L);
+static inline int vm_hotloop(lua_State *L);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline void vm_savepc(lua_State *L, const BCIns *pc);
 static inline int32_t tobit(TValue *num);
@@ -1041,6 +1043,7 @@ static inline void execute1(lua_State *L) {
     break;
   case BC_FORL:
     TRACE("FORL");
+    if (!vm_hotloop(L))
     {
       TValue *state = BASE + A;
       TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
@@ -1052,7 +1055,6 @@ static inline void execute1(lua_State *L) {
       if ((step->n >= 0 && idx->n <= stop->n) ||
           (step->n <  0 && stop->n <= idx->n))
         branchPC(D);
-      /* XXX hotloop */
     }
     break;
   case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
@@ -1076,7 +1078,7 @@ static inline void execute1(lua_State *L) {
   case BC_JFORL:  assert(0 && "NYI BYTECODE: JFORL");
   case BC_ITERL:
     TRACE("ITERL");
-    /* XXX hotloop */
+    if (vm_hotloop(L)) break;
   case BC_IITERL:
     if (OP == BC_IITERL) TRACE("IITERL");
     if (!tvisnil(BASE+A)) {
@@ -1088,11 +1090,12 @@ static inline void execute1(lua_State *L) {
     if (OP == BC_JITERL) assert(0 && "NYI BYTECODE: JITERL");
     break;
   case BC_LOOP:
+    TRACE("LOOP");
+    if (vm_hotloop(L)) break;
   case BC_ILOOP:
-  case BC_JLOOP:
-    TRACE("*LOOP");
-    /* XXX hotloop */
+    if (OP == BC_ILOOP) TRACE("ILOOP");
     break;
+  case BC_JLOOP: assert(0 && "NYI BYTECODE: JLOOP");
   case BC_JMP:
     TRACE("JMP");
     branchPC(D);
@@ -1994,6 +1997,49 @@ static void fff_fallback(lua_State *L) {
 }
 
 
+/* -- JIT trace recorder -------------------------------------------------- */
+
+/* Record and execute virtual machine instructions until the trace is complete
+ * (or aborted).
+ *
+ * The trace triggering instruction (PC-1) is expected to already be recorded
+ * (but not executed!) by the caller.
+ */
+static void execute_trace(lua_State *L, jit_State *J) {
+  PC--; /* Rewind to first recorded instruction. */
+  do {
+    execute1(L);
+    if (VMEXIT)
+      lj_trace_end(J);
+    lj_trace_ins(J, PC); /* Record next instruction or trace end. */
+  } while (J->state == LJ_TRACE_RECORD);
+  assert(J->state == LJ_TRACE_IDLE);
+  VMEXIT = 0;
+}
+
+/* Hot loop detection: invoke trace recorder if loop body is hot.
+ *
+ * A non-zero return value indicates to the caller that a trace was recorded
+ * (and executed), and it need not continue executing the current instruction.
+ */
+static inline int vm_hotloop(lua_State *L) {
+  jit_State *J = L2J(L);
+  HotCount old_count = hotcount_get(L2GG(L), PC);
+  HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_LOOP);
+  if (new_count > old_count) {
+    /* Hot loop counter underflow. */
+    vm_savepc(L, PC);
+    lj_trace_hot(J, PC);
+    if (J->state == LJ_TRACE_RECORD) {
+      /* Trace started: execute in recorder. */
+      execute_trace(L, J);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+
 /* -- Various auxiliary VM functions -------------------------------------- */
 
 /* Save a pc to the active CFrame.
@@ -2029,6 +2075,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
+  L2J(L)->L = L;
   /* Setup VM state for callee. */
   STATE = ~LJ_VMST_INTERP;
   vm_call(L, newbase, TOP - newbase, (p ? FRAME_CP : FRAME_C));
@@ -2072,6 +2119,7 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
+  L2J(L)->L = L;
   /* Setup "catch" jump buffer for a protected call. */
   res = _setjmp(cf.jb);
   if (res < 0) {
@@ -2109,6 +2157,7 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   setmref(L->cframe, (intptr_t)&cf + CFRAME_RESUME);
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
+  L2J(L)->L = L;
   /* Setup VM state for callee. */
   STATE = ~LJ_VMST_INTERP;
   if (L->status == LUA_OK) {
