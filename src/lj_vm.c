@@ -1086,8 +1086,17 @@ static inline void execute1(lua_State *L) {
       branchPC(D);
       BASE[A-1] = *(BASE+A);
     }
+    break;
   case BC_JITERL:
-    if (OP == BC_JITERL) assert(0 && "NYI BYTECODE: JITERL");
+    TRACE("JITERL");
+    if (!tvisnil(BASE+A)) {
+      jit_State *J = L2J(L);
+      GCtrace *trace = mref(J->trace[D], GCtrace);
+      J2G(L)->jit_base = BASE;
+      J2G(L)->tmpbuf.L = L;
+      BASE[A-1] = *(BASE+A);
+      assert(0 && "NYI: jump to trace->mcode");
+    }
     break;
   case BC_LOOP:
     TRACE("LOOP");
