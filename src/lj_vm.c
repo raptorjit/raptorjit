@@ -24,6 +24,7 @@
 #include "lj_func.h"
 #include "lj_buf.h"
 #include "lj_trace.h"
+#include "lj_err.h"
 
 /* Count of executed instructions for debugger prosperity. */
 static uint64_t insctr;
@@ -57,6 +58,7 @@ static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 static void fff_fallback(lua_State *L);
 static inline int vm_hotloop(lua_State *L);
+static inline void vm_exec_trace(lua_State *L, BCReg traceno);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline void vm_savepc(lua_State *L, const BCIns *pc);
 static inline int32_t tobit(TValue *num);
@@ -1092,12 +1094,8 @@ static inline void execute1(lua_State *L) {
   case BC_JITERL:
     TRACE("JITERL");
     if (!tvisnil(BASE+A)) {
-      jit_State *J = L2J(L);
-      GCtrace *trace = mref(J->trace[D], GCtrace);
-      J2G(L)->jit_base = BASE;
-      J2G(L)->tmpbuf.L = L;
       BASE[A-1] = *(BASE+A);
-      assert(0 && "NYI: jump to trace->mcode");
+      vm_exec_trace(L, D);
     }
     break;
   case BC_LOOP:
@@ -2050,6 +2048,48 @@ static inline int vm_hotloop(lua_State *L) {
   return 0;
 }
 
+/* Execute a JIT compiled machine code trace.
+ *
+ * Sets up the global context state needed for trace execution, and
+ * synchronizes trace machine code and bytecode interpreter VM via
+ * TraceCallState.
+ *
+ * Can either rethrow an error returned from the trace, or continue
+ * interpreter execution with new PC/BASE.
+ */
+static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
+  jit_State *J = L2J(L);
+  GCtrace *trace = gcrefp(J->trace[traceno], GCtrace);
+  volatile TraceCallState tcs = { J2GG(J)->dispatch, BASE };
+  /* Setup trace context. */
+  J2G(J)->jit_base = BASE;
+  J2G(J)->tmpbuf.L = L;
+  /* Call JIT compiled trace with call state. */
+  lj_vm_trace_call(&tcs, trace->mcode);
+  if (tcs.multres < 0) {
+    /* Error returned from trace, rethrow from the right C frame. */
+    lj_err_throw(L, -tcs.multres);
+  } else {
+    /* Successful exit: set PC, BASE, KBASE, and MULTRES according to tcs. */
+    PC = tcs.pc;
+    BASE = tcs.base;
+    GCfunc *f = funcV(BASE-2);
+    if (isluafunc(f)) {
+      /* XXX: what should happen if BASE-2 is not a lua function? */
+      GCproto *pt = funcproto(funcV(BASE-2));
+      TOP = BASE + pt->framesize;
+      KBASE = mref(pt->k, void);
+    }
+    MULTRES = tcs.multres;
+    /* Record which trace exited to the interpreter. */
+    // XXX: should not be done for vm_exit_interp_notrack
+    J2G(J)->lasttrace = STATE;
+    /* Return to interpreter. */
+    J2G(L)->jit_base = NULL;
+    STATE = ~LJ_VMST_INTERP;
+  }
+}
+
 
 /* -- Various auxiliary VM functions -------------------------------------- */
 
@@ -2226,7 +2266,6 @@ void lj_vm_callhook(void) { assert(0 && "NYI"); }
 
 /* Trace exit handling. */
 void lj_vm_exit_handler(void) { assert(0 && "NYI"); }
-void lj_vm_exit_interp(void)  { assert(0 && "NYI"); }
 void lj_vm_exit_interp_notrack(void) { assert(0 && "NYI"); }
 
 /* Internal math helper functions. */

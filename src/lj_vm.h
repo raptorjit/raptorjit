@@ -36,7 +36,14 @@ LJ_ASMF void lj_vm_inshook(void);
 LJ_ASMF void lj_vm_rethook(void);
 LJ_ASMF void lj_vm_callhook(void);
 
-/* Trace exit handling. */
+/* Trace entry and exit handling. See lj_vm_trace_call_*.asm */
+typedef struct TraceCallState {
+  ASMFunction *dispatch;
+  TValue *base;
+  int multres;
+  BCIns *pc;
+} TraceCallState;
+LJ_ASMF void lj_vm_trace_call(volatile TraceCallState *tcs, void *mcode);
 LJ_ASMF void lj_vm_exit_handler(void);
 LJ_ASMF void lj_vm_exit_interp(void);
 LJ_ASMF void lj_vm_exit_interp_notrack(void);
