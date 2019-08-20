@@ -1,5 +1,7 @@
 /*
 ** RaptorJIT virtual machine bytecode interpreter.
+** Copyright (C) 2018-2019 Luke Gorrie, Max Rottenkolber
+** See Copyright Notice in luajit.h
 */
 
 #include <assert.h>
@@ -2208,7 +2210,6 @@ void lj_vm_unwind_c_eh(void)                   { assert(0 && "NYI"); }
 void lj_vm_unwind_ff_eh(void)                  { assert(0 && "NYI"); }
 void lj_vm_unwind_rethrow(void)                { assert(0 && "NYI"); }
 void lj_vm_ffi_callback()                      { assert(0 && "NYI"); }
-void lj_vm_ffi_call(CCallState *cc); /* See lj_vm_ffi_call_*.asm */
 
 /* Miscellaneous functions. */
 int lj_vm_cpuid(uint32_t f, uint32_t res[4])       {
