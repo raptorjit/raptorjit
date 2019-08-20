@@ -24,6 +24,7 @@
 #include "lj_func.h"
 #include "lj_buf.h"
 #include "lj_trace.h"
+#include "lj_jit.h"
 #include "lj_err.h"
 
 /* Count of executed instructions for debugger prosperity. */
@@ -2090,6 +2091,29 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   }
 }
 
+/* Trace stitching continuation. */
+void lj_cont_stitch(void) {
+  lua_State *L = CONT_L;
+  jit_State *J = L2J(L);
+  BCIns curins = *(PC-1);
+  GCtrace *prev = (GCtrace *)gcV(CONT_BASE-5);
+  TValue *callbase = BASE+A;
+  /* Copy results. */
+  copyTVs(L, callbase, CONT_BASE+CONT_OFS, MULTRES, B-1);
+  /* Have a trace, and it is not blacklisted? */
+  if (prev && prev->traceno != prev->link) {
+    if (prev->link) {
+      /* Jump to stitched trace. */
+      assert(0 && "NYI: jump to stitched trace.");
+    } else {
+      /* Stitch a new trace to the previous trace. */
+      J->L = L;
+      J->exitno = prev->traceno;
+      lj_dispatch_stitch(J, PC);
+    }
+  }
+}
+
 
 /* -- Various auxiliary VM functions -------------------------------------- */
 
@@ -2315,13 +2339,12 @@ void lj_cont_condt(void) {
 }
 
 void lj_cont_condf(void)  {
-/* Branch if result is false. */
+  /* Branch if result is false. */
   int flag = !(MULTRES && tvistruecond(CONT_BASE+CONT_OFS));
   BCIns curins = *PC++;
   if (flag) branchPC(D);
 }
 
 void lj_cont_hook(void)	  { assert(0 && "NYI"); }
-void lj_cont_stitch(void) { assert(0 && "NYI"); }
 
 char lj_vm_asm_begin[0];
