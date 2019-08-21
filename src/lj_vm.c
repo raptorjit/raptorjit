@@ -2074,6 +2074,9 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   jit_State *J = L2J(L);
   GCtrace *trace = gcrefp(J->trace[traceno], GCtrace);
   volatile TraceCallState tcs = { J2GG(J)->dispatch, BASE };
+  uint64_t link;
+  int delta;
+  GCproto *pt;
   /* Setup trace context. */
   J2G(J)->jit_base = BASE;
   J2G(J)->tmpbuf.L = L;
@@ -2083,17 +2086,34 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
     /* Error returned from trace, rethrow from the right C frame. */
     lj_err_throw(L, -tcs.multres);
   } else {
-    /* Successful exit: set PC, BASE, KBASE, and MULTRES according to tcs. */
+    /* Successful exit: set PC, BASE, and MULTRES according to tcs. */
     PC = tcs.pc;
     BASE = tcs.base;
-    GCfunc *f = funcV(BASE-2);
-    if (isluafunc(f)) {
-      /* XXX: what should happen if BASE-2 is not a lua function? */
-      GCproto *pt = funcproto(funcV(BASE-2));
+    MULTRES = tcs.multres-1;
+    /* yoooo */
+    link = BASE[-1].u64;
+    if ((link & FRAME_TYPE) == FRAME_CONT) {
+      /* Frame stitching continuation. */
+      NARGS = MULTRES;
+      pt = NULL;
+    } else if (bc_op(*PC) >= BC__MAX) {
+      /* Fast function. */
+      NARGS = MULTRES;
+      /* Get Lua function prototype below. */
+      delta = link >> 3;
+      pt = funcproto(funcV(BASE-delta-2));
+    } else {
+      /* If PC points to a function header we set NARGS. */
+      if (bc_op(*PC) >= BC_FUNCF)
+        NARGS = MULTRES;
+      /* Must be a Lua frame: get Lua function prototype. */
+      pt = funcproto(funcV(BASE-2));
+    }
+    if (pt != NULL) {
+      /* Set TOP and KBASE according to Lua function prototype. */
       TOP = BASE + pt->framesize;
       KBASE = mref(pt->k, void);
     }
-    MULTRES = tcs.multres;
     /* Record which trace exited to the interpreter. */
     // XXX: should not be done for vm_exit_interp_notrack
     J2G(J)->lasttrace = STATE;
