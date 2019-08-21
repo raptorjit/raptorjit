@@ -2086,34 +2086,20 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
     /* Error returned from trace, rethrow from the right C frame. */
     lj_err_throw(L, -tcs.multres);
   } else {
-    /* Successful exit: set PC, BASE, and MULTRES according to tcs. */
+    /* Successful exit: set PC, BASE, and NARGS/MULTRES according to tcs. */
     PC = tcs.pc;
     BASE = tcs.base;
-    MULTRES = tcs.multres-1;
-    /* yoooo */
+    NARGS = MULTRES = tcs.multres-1;
+    /* Set TOP/KBASE according to next Lua function prototype. */
     link = BASE[-1].u64;
-    if ((link & FRAME_TYPE) == FRAME_CONT) {
-      /* Frame stitching continuation. */
-      NARGS = MULTRES;
-      pt = NULL;
-    } else if (bc_op(*PC) >= BC__MAX) {
-      /* Fast function. */
-      NARGS = MULTRES;
-      /* Get Lua function prototype below. */
+    if ((link & FRAME_TYPE) == FRAME_LUA) {
+      pt = funcproto(funcV(BASE-2));
+    } else {
       delta = link >> 3;
       pt = funcproto(funcV(BASE-delta-2));
-    } else {
-      /* If PC points to a function header we set NARGS. */
-      if (bc_op(*PC) >= BC_FUNCF)
-        NARGS = MULTRES;
-      /* Must be a Lua frame: get Lua function prototype. */
-      pt = funcproto(funcV(BASE-2));
     }
-    if (pt != NULL) {
-      /* Set TOP and KBASE according to Lua function prototype. */
-      TOP = BASE + pt->framesize;
-      KBASE = mref(pt->k, void);
-    }
+    TOP = BASE + pt->framesize;
+    KBASE = mref(pt->k, void);
     /* Record which trace exited to the interpreter. */
     // XXX: should not be done for vm_exit_interp_notrack
     J2G(J)->lasttrace = STATE;
