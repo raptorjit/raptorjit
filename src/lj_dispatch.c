@@ -63,13 +63,6 @@ void lj_dispatch_init_hotcount(global_State *g)
     hotcount[i] = start;
 }
 
-/* Internal dispatch mode bits. */
-#define DISPMODE_CALL	0x01	/* Override call dispatch. */
-#define DISPMODE_RET	0x02	/* Override return dispatch. */
-#define DISPMODE_INS	0x04	/* Override instruction dispatch. */
-#define DISPMODE_JIT	0x10	/* JIT compiler on. */
-#define DISPMODE_REC	0x20	/* Recording active. */
-
 /* Update dispatch table depending on various flags. */
 void lj_dispatch_update(global_State *g)
 {

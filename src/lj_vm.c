@@ -24,8 +24,8 @@
 #include "lj_func.h"
 #include "lj_buf.h"
 #include "lj_trace.h"
-#include "lj_jit.h"
 #include "lj_err.h"
+#include "lj_vm_tcs.h"
 
 /* Count of executed instructions for debugger prosperity. */
 static uint64_t insctr;
@@ -67,7 +67,7 @@ static inline int32_t tobit(TValue *num);
 void lj_ffh_coroutine_wrap_err(lua_State *L, lua_State *co);
 
 /* Simple debug utility. */
-#if 0
+#if 1
 static void printstack(lua_State *L)
 {
   int i;
@@ -2081,40 +2081,57 @@ static inline int vm_hotloop(lua_State *L) {
 static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   jit_State *J = L2J(L);
   GCtrace *trace = gcrefp(J->trace[traceno], GCtrace);
-  volatile TraceCallState tcs = { J2GG(J)->dispatch, BASE };
+  TraceCallState tcs = { BASE };
+  int status;
   uint64_t link;
   int delta;
   GCproto *pt;
   /* Setup trace context. */
   J2G(J)->jit_base = BASE;
   J2G(J)->tmpbuf.L = L;
+  J2GG(J)->tcs = &tcs;
   /* Call JIT compiled trace with call state. */
-  lj_vm_trace_call(&tcs, trace->mcode);
-  if (tcs.multres < 0) {
-    /* Error returned from trace, rethrow from the right C frame. */
-    lj_err_throw(L, -tcs.multres);
-  } else {
-    /* Successful exit: set PC, BASE, and NARGS/MULTRES according to tcs. */
-    PC = tcs.pc;
-    BASE = tcs.base;
-    NARGS = MULTRES = tcs.multres-1;
-    /* Set TOP/KBASE according to next Lua function prototype. */
-    link = BASE[-1].u64;
-    if ((link & FRAME_TYPE) == FRAME_LUA) {
-      pt = funcproto(funcV(BASE-2));
-    } else {
-      delta = link >> 3;
-      pt = funcproto(funcV(BASE-delta-2));
-    }
-    TOP = BASE + pt->framesize;
-    KBASE = mref(pt->k, void);
+  lj_vm_trace_call(J2GG(J)->dispatch, trace->mcode);
+  /* Handle trace exit. */
+  if (tcs.handler != TRACE_EXIT_INTERP_NOTRACK) {
     /* Record which trace exited to the interpreter. */
-    // XXX: should not be done for vm_exit_interp_notrack
     J2G(J)->lasttrace = STATE;
-    /* Return to interpreter. */
-    J2G(L)->jit_base = NULL;
-    STATE = ~LJ_VMST_INTERP;
   }
+  /* Successful exit, restore interpreter state. */
+  if (tcs.handler == TRACE_EXIT) {
+    J->L = L;
+    J->parent = STATE;
+    J->exitno = tcs.exitno;
+    STATE = ~LJ_VMST_EXIT;
+    BASE = J2G(J)->jit_base;
+    J2G(J)->jit_base = NULL;
+    status = lj_trace_exit(J, &tcs.exitstate);
+    PC = cframe_pc(cframe_raw(L->cframe)); // set by lj_trace_exit
+  } else {
+    BASE = TCS_BASE(tcs);
+    status = TCS_MULTRES(tcs);
+    PC = TCS_PC(tcs);
+  }
+  if (status > 0) {
+    /* Status is MULTRES+1. */
+    NARGS = MULTRES = status-1;
+  } else if (status < 0) {
+    /* Error returned from trace, rethrow from the right C frame. */
+    lj_err_throw(L, -status);
+  }
+  /* Set TOP/KBASE according to next Lua function prototype. */
+  link = BASE[-1].u64;
+  if ((link & FRAME_TYPE) == FRAME_LUA) {
+    pt = funcproto(funcV(BASE-2));
+  } else {
+    delta = link >> 3;
+    pt = funcproto(funcV(BASE-delta-2));
+  }
+  TOP = BASE + pt->framesize;
+  KBASE = mref(pt->k, void);
+  /* Return to interpreter. */
+  J2G(J)->jit_base = NULL;
+  STATE = ~LJ_VMST_INTERP;
 }
 
 /* Trace stitching continuation. */
@@ -2315,7 +2332,6 @@ void lj_vm_rethook(void)  { assert(0 && "NYI"); }
 void lj_vm_callhook(void) { assert(0 && "NYI"); }
 
 /* Trace exit handling. */
-void lj_vm_exit_handler(void) { assert(0 && "NYI"); }
 void lj_vm_exit_interp_notrack(void) { assert(0 && "NYI"); }
 
 /* Internal math helper functions. */

@@ -36,6 +36,7 @@ typedef struct GG_State {
   global_State g;			/* Global state. */
   jit_State J;				/* JIT state. */
   HotCount hotcount[HOTCOUNT_SIZE];	/* Hot counters. */
+  void *tcs;                            /* Current TraceCallState. */
   ASMFunction dispatch[GG_LEN_DISP];	/* Instruction dispatch tables. */
   BCIns bcff[GG_NUM_ASMFF];		/* Bytecode for ASM fast functions. */
 } GG_State;
@@ -53,6 +54,13 @@ typedef struct GG_State {
 #define GG_DISP2J	(GG_OFS(J) - GG_OFS(dispatch))
 #define GG_DISP2HOT	(GG_OFS(hotcount) - GG_OFS(dispatch))
 #define GG_DISP2STATIC	(GG_LEN_DDISP*(int)sizeof(ASMFunction))
+
+/* Dispatch mode bits. */
+#define DISPMODE_CALL	0x01	/* Override call dispatch. */
+#define DISPMODE_RET	0x02	/* Override return dispatch. */
+#define DISPMODE_INS	0x04	/* Override instruction dispatch. */
+#define DISPMODE_JIT	0x10	/* JIT compiler on. */
+#define DISPMODE_REC	0x20	/* Recording active. */
 
 #define hotcount_get(gg, pc) \
   (gg)->hotcount[(u32ptr(pc)>>2) & (HOTCOUNT_SIZE-1)]
