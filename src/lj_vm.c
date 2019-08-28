@@ -2140,9 +2140,6 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   /* Return to interpreter. */
   J2G(J)->jit_base = NULL;
   STATE = ~LJ_VMST_INTERP;
-  /* Could be that an exit was detected as hot by lj_trace_exit. */
-  if (J->state == LJ_TRACE_RECORD)
-    execute_record(L, J);
 }
 
 /* Trace stitching continuation. */
