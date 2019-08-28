@@ -17,15 +17,15 @@ enum {
 
 /* Trace call state. Must match lj_vm_trace_call_*.asm */
 typedef struct {
-  TValue *base; /* Copy of BASE to avoid chasing lua_State in asm. */
-  void *rsp;
-  int handler; /* See enum above. */
-  ExitNo exitno;
-  ExitState exitstate;
+  void *rsp; /* Stack pointer at trace entry. */
+  int handler; /* Handler for trace exit, see enum above. */
+  ExitNo exitno; /* Exit taken. */
+  ExitState state; /* Register and stack state on entry/exit. */
 } TraceCallState;
 
-#define TCS_MULTRES(tcs) ((int)(tcs).exitstate.gpr[RID_RET])
-#define TCS_PC(tcs) ((BCIns *)(tcs).exitstate.gpr[RID_LPC])
-#define TCS_BASE(tcs) ((TValue *)(tcs).exitstate.gpr[RID_BASE])
+#define GPR_RET RID_RET
+#define GPR_PC RID_LPC
+#define GPR_BASE RID_BASE
+#define GPR_DISPATCH RID_DISPATCH
 
 #endif

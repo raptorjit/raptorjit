@@ -2087,7 +2087,7 @@ static inline int vm_hotloop(lua_State *L) {
 static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   jit_State *J = L2J(L);
   GCtrace *trace = gcrefp(J->trace[traceno], GCtrace);
-  TraceCallState tcs = { BASE };
+  TraceCallState tcs = {};
   int status;
   uint64_t link;
   int delta;
@@ -2096,8 +2096,10 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   J2G(J)->jit_base = BASE;
   J2G(J)->tmpbuf.L = L;
   J2GG(J)->tcs = &tcs;
+  tcs.state.gpr[GPR_DISPATCH] = (intptr_t)J2GG(J)->dispatch;
+  tcs.state.gpr[GPR_BASE] = (intptr_t)BASE;
   /* Call JIT compiled trace with call state. */
-  lj_vm_trace_call(J2GG(J)->dispatch, trace->mcode);
+  lj_vm_trace_call(&tcs, trace->mcode);
   /* Handle trace exit. */
   if (tcs.handler != TRACE_EXIT_INTERP_NOTRACK) {
     /* Record which trace exited to the interpreter. */
@@ -2111,12 +2113,12 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
     STATE = ~LJ_VMST_EXIT;
     BASE = J2G(J)->jit_base;
     J2G(J)->jit_base = NULL;
-    status = lj_trace_exit(J, &tcs.exitstate);
+    status = lj_trace_exit(J, &tcs.state);
     PC = cframe_pc(cframe_raw(L->cframe)); // set by lj_trace_exit
   } else {
-    BASE = TCS_BASE(tcs);
-    status = TCS_MULTRES(tcs);
-    PC = TCS_PC(tcs);
+    BASE = (TValue*)tcs.state.gpr[GPR_BASE];
+    status = (int)tcs.state.gpr[GPR_RET];
+    PC = (BCIns*)tcs.state.gpr[GPR_PC];
   }
   if (status > 0) {
     /* Status is MULTRES+1. */

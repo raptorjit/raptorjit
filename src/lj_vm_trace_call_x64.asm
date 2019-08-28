@@ -39,13 +39,13 @@ lj_vm_trace_call:
         push r15
 
 ;;; Setup register state (DISPATCH, BASE) for use by JITed code from tcs.
-        mov r14, rdi
-        mov rax, [rdi-8]        ;tcs relative to dispatch
-        mov rdx, [rax+0]        ;tcs->base
+        lea rax, [rdi+144]      ;tcs->state.gpr
+        mov r14, [rax+14*8]     ;GPR_DISPATCH
+        mov rdx, [rax+2*8]      ;GPR_BASE
 
 ;;; Save rsp minus offset for return address (call) into tcs.
-        lea rcx, [rsp-8]
-        mov [rax+8], rcx        ;tcs->rsp = rsp-8
+        lea rax, [rsp-8]
+        mov [rdi+0], rax        ;tcs->rsp = rsp-8
 
 ;;; Call JITed code, which will jump to exit handler, which in turn will
 ;;; return here.
@@ -69,7 +69,7 @@ lj_vm_trace_call:
 lj_vm_exit_interp:
         push rax
         mov rax, [r14-8]        ;tcs relative to dispatch
-        mov dword [rax+16], 1   ;tcs->handler = TRACE_EXIT_INTERP
+        mov dword [rax+8], 1    ;tcs->handler = TRACE_EXIT_INTERP
         pop rax
         jmp lj_vm_exit
 
@@ -78,13 +78,13 @@ lj_vm_exit_interp:
 lj_vm_exit_handler:
         push rax
         mov rax, [r14-8]        ;tcs relative to dispatch
-        mov dword [rax+16], 0   ;tcs->handler = TRACE_EXIT
+        mov dword [rax+8], 0    ;tcs->handler = TRACE_EXIT
 
 ;;; Reconstruct exit number.
         push rcx
         mov ecx, dword [rsp+24] ;lower half of exit no
         mov ch, byte [rsp+16]   ;upper half of exit no
-        mov dword [rax+20], ecx ;tcs->exitno (actually a uint32_t)
+        mov dword [rax+12], ecx ;tcs->exitno (actually a uint32_t)
 
         pop rcx
         pop rax
@@ -92,12 +92,12 @@ lj_vm_exit_handler:
 
         jmp lj_vm_exit
 
-;;; Build tcs->exitstate and restore stack for return to lj_vm_trace_call.
+;;; Build tcs->state and restore stack for return to lj_vm_trace_call.
 lj_vm_exit:
 ;;; Copy register state.
         push rax
         mov rax, [r14-8]        ;tcs relative to dispatch
-        lea rax, [rax+24]       ;tcs->exitstate
+        lea rax, [rax+16]       ;tcs->state
         mov [rax+248], r15
         mov [rax+240], r14
         mov [rax+232], r13
@@ -132,9 +132,9 @@ lj_vm_exit:
         movsd qword [rax+0], xmm0
 
 ;;; Copy spill slots.
-        lea rax, [rax+256]      ;exitstate->spill
+        lea rax, [rax+256]      ;state->spill
         mov rdx, [r14-8]        ;tcs relative to dispatch
-        mov rdx, [rdx+8]        ;tcs->rsp
+        mov rdx, [rdx+0]        ;tcs->rsp
         mov rbx, rsp
         sub rbx, rdx
         mov rcx, 0
