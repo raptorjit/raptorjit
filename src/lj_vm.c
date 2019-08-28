@@ -2054,18 +2054,24 @@ static void execute_record(lua_State *L, jit_State *J) {
  */
 static inline int vm_hotloop(lua_State *L) {
   jit_State *J = L2J(L);
-  HotCount old_count = hotcount_get(L2GG(L), PC);
-  HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_LOOP);
-  if (new_count > old_count) {
-    /* Hot loop counter underflow. */
-    vm_savepc(L, PC);
-    lj_trace_hot(J, PC);
-    if (J->state == LJ_TRACE_RECORD) {
-      /* Trace started: execute in recorder. */
-      execute_record(L, J);
-      return 1;
+  HotCount old_count;
+  HotCount new_count;
+  /* Hotcount if JIT is on, but not while recording. */
+  if ((G(L)->dispatchmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
+    old_count = hotcount_get(L2GG(L), PC);
+    new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_LOOP);
+    if (new_count > old_count) {
+      /* Hot loop counter underflow. */
+      vm_savepc(L, PC);
+      lj_trace_hot(J, PC);
+      if (J->state == LJ_TRACE_RECORD) {
+        /* Trace started: execute in recorder. */
+        execute_record(L, J);
+        return 1;
+      }
     }
   }
+  /* Do nothing (do not start recording.) */
   return 0;
 }
 
