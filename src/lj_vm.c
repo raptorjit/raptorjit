@@ -2035,7 +2035,7 @@ static void fff_fallback(lua_State *L) {
  * The trace triggering instruction (PC-1) is expected to already be recorded
  * (but not executed!) by the caller.
  */
-static void execute_record(lua_State *L, jit_State *J) {
+static void execute_trace(lua_State *L, jit_State *J) {
   PC--; /* Rewind to first recorded instruction. */
   do {
     execute1(L);
@@ -2066,7 +2066,7 @@ static inline int vm_hotloop(lua_State *L) {
       lj_trace_hot(J, PC);
       if (J->state == LJ_TRACE_RECORD) {
         /* Trace started: execute in recorder. */
-        execute_record(L, J);
+        execute_trace(L, J);
         return 1;
       }
     }
