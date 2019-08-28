@@ -55,9 +55,9 @@ static uint64_t insctr_tracefrom = UINT64_MAX;
 /* Forward declarations. */
 static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp);
 static inline void vm_callt(lua_State *L, int offset, int _nargs);
-static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
+static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
-static void fff_fallback(lua_State *L);
+static int fff_fallback(lua_State *L);
 static inline int vm_hotloop(lua_State *L);
 static inline void vm_exec_trace(lua_State *L, BCReg traceno);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
@@ -115,7 +115,6 @@ static int multres;
 static int nargs;
 static void *kbase;
 static const BCIns *pc;
-static int vmexit = 0;
 static lua_State *cont_L;
 static TValue *cont_base;
 ptrdiff_t cont_ofs;
@@ -202,10 +201,6 @@ ptrdiff_t cont_ofs;
 #define C  bc_c(curins)
 #define D  bc_d(curins)
 
-/* Register VMEXIT can be set to signal that no instructions are left to
- * execute and the interpreter should return. */
-#define VMEXIT vmexit
-
 /* Registers CONT_L, CONT_BASE, and CONT_OFS are set when returning from
  * metamethod continuation frames (FRAME_CONT case in vm_return) and used by
  * metamethod continuations (lj_cont_*). CONT_L is the active lua_State and
@@ -257,12 +252,12 @@ static inline void branchPC(int offset)
 #define kgcref(n, type) ((type *)kgc(n))
 
 
-/* Execute a single virtual machine instruction.
- * Sets VMEXIT if it is the last instruction to be executed.
- */
-static inline void execute1(lua_State *L) {
-  BCIns curins = *PC++;
+/* Execute virtual machine instructions in a tail-recursive loop. */
+void execute(lua_State *L) {
+  BCIns curins;
+ execute:
   insctr++;
+  curins = *PC++;
   switch (OP) {
   case BC_ISLT:
     /* ISLT: Take following JMP instruction if A < D. */
@@ -1032,19 +1027,19 @@ static inline void execute1(lua_State *L) {
     break;
   case BC_RETM:
     TRACE("RETM");
-    vm_return(L, BASE[-1].u64, A, D+MULTRES);
+    if (vm_return(L, BASE[-1].u64, A, D+MULTRES)) return;
     break;
   case BC_RET:
     TRACE("RET");
-    vm_return(L, BASE[-1].u64, A, D-1);
+    if (vm_return(L, BASE[-1].u64, A, D-1)) return;
     break;
   case BC_RET0:
     TRACE("RET0");
-    vm_return(L, BASE[-1].u64, A, 0);
+    if (vm_return(L, BASE[-1].u64, A, 0)) return;
     break;
   case BC_RET1:
     TRACE("RET1");
-    vm_return(L, BASE[-1].u64, A, 1);
+    if (vm_return(L, BASE[-1].u64, A, 1)) return;
     break;
   case BC_FORL:
     TRACE("FORL");
@@ -1176,7 +1171,7 @@ static inline void execute1(lua_State *L) {
       nresults = (*f)(L);
       STATE = ~LJ_VMST_INTERP;
       resultofs = TOP - (BASE + nresults);
-      vm_return(L, BASE[-1].u64, resultofs, nresults);
+      if (vm_return(L, BASE[-1].u64, resultofs, nresults)) return;
     }
     break;
   default:
@@ -1188,8 +1183,8 @@ static inline void execute1(lua_State *L) {
     case 0x61:
       TRACEFF("assert");
       if (NARGS >= 1 && tvistruecond(BASE)) {
-        vm_return(L, BASE[-1].u64, 0, NARGS);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, NARGS)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x62:
       TRACEFF("type");
@@ -1200,8 +1195,8 @@ static inline void execute1(lua_State *L) {
           type = LJ_TISNUM;
         type = ~type;
         BASE[-2] = f->upvalue[type];
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x63:
       TRACEFF("next");
@@ -1211,18 +1206,18 @@ static inline void execute1(lua_State *L) {
         vm_savepc(L, (BCIns*)BASE[-1].u64);
         if (lj_tab_next(L, tabV(BASE), BASE+1)) {
           /* Copy key and value to results. */
-          vm_return(L, BASE[-1].u64, 1, 2);
+          if (vm_return(L, BASE[-1].u64, 1, 2)) return;
         } else {
           /* End of traversal: return nil. */
           setnilV(BASE-2);
-          vm_return(L, BASE[-1].u64, -2, 1);
+          if (vm_return(L, BASE[-1].u64, -2, 1)) return;
         }
-      } else fff_fallback(L);
+      } else if (fff_fallback(L)) return;
       break;
     case 0x64:
       TRACEFF("pairs");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x65:
       TRACEFF("ipairs_aux");
@@ -1249,13 +1244,13 @@ static inline void execute1(lua_State *L) {
         break;
         /* End of interator: return no values. */
       ipairs_end:
-        vm_return(L, link, -2, 0);
-      } else fff_fallback(L);
+        if (vm_return(L, link, -2, 0)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x66:
       TRACEFF("ipairs");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x67:
       TRACEFF("getmetatable");
@@ -1276,31 +1271,31 @@ static inline void execute1(lua_State *L) {
         } else {
           setnilV(BASE-2);
         }
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x68:
       TRACEFF("setmetatable");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x6a:
       TRACEFF("tonumber");
       if (NARGS == 1 && tvisnumber(BASE)) {
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x69:
       TRACEFF("rawget");
       if (NARGS >= 2 && tvistab(BASE)) {
         copyTV(L, BASE, lj_tab_get(L, tabV(BASE), BASE+1));
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x6b:
       TRACEFF("tostring");
       /* XXX - punt to fallback. */
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x6c:
       TRACEFF("pcall");
@@ -1313,7 +1308,7 @@ static inline void execute1(lua_State *L) {
         while (copyargs--)
           copyTV(L, callbase+copyargs, BASE+1+copyargs);
         vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
-      } else fff_fallback(L);
+      } else if (fff_fallback(L)) return;
       break;
     case 0x6d:
       TRACEFF("xpcall");
@@ -1330,7 +1325,7 @@ static inline void execute1(lua_State *L) {
         while (copyargs--)
           copyTV(L, callbase+copyargs, BASE+2+copyargs);
         vm_call(L, callbase, NARGS, FRAME_PCALL + hookflag);
-      } else fff_fallback(L);
+      } else if (fff_fallback(L)) return;
       break;
     /*
      * -- Resuming and yielding from coroutines ---------------------------
@@ -1366,9 +1361,9 @@ static inline void execute1(lua_State *L) {
           TOP = BASE+NARGS;
           L->cframe = 0;
           L->status = LUA_YIELD;
-          VMEXIT = 1;
+          return;
         } else
-          fff_fallback(L);
+          if (fff_fallback(L)) return;
       }
       break;
     case 0x6f:
@@ -1466,76 +1461,76 @@ static inline void execute1(lua_State *L) {
             /* Return (false, <error>) */
             setboolV(BASE, 0);
             copyTV(L, BASE+1, co->top);
-            vm_return(L, BASE[-1].u64, 0, 2);
+            if (vm_return(L, BASE[-1].u64, 0, 2)) return;
           }
         }
         break;
       resume_fallback:
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
         break;
       }
     case 0x71:
       TRACEFF("math.abs");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, BASE->n < 0 ? -1*BASE->n : BASE->n);
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x72:
       TRACEFF("math.floor");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, lj_vm_floor(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x73:
       TRACEFF("math.ceil");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, lj_vm_ceil(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x74:
       TRACEFF("math.sqrt");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, sqrt(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x75:
       TRACEFF("math.log10");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, log10(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x76:
       TRACEFF("math.exp");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, exp(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x77:
       TRACEFF("math.sin");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, sin(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x78:
       TRACEFF("math.cos");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, cos(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x79:
       TRACEFF("math.tan");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, cos(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x80:
       TRACEFF("math.frexp");
@@ -1543,36 +1538,36 @@ static inline void execute1(lua_State *L) {
         int n;
         setnumV(BASE, frexp(numV(BASE), &n));
         setnumV(BASE+1, n);
-        vm_return(L, BASE[-1].u64, 0, 2);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 2)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x81:
       TRACEFF("math.modf");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE, modf(numV(BASE), &BASE[1].n));
-        vm_return(L, BASE[-1].u64, 0, 2);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 2)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x82:
       TRACEFF("math.log");
       if (NARGS >= 1 && tvisnum(BASE)) {
         setnumV(BASE-2, log(numV(BASE)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x83:
       TRACEFF("math.atan2");
       if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         setnumV(BASE-2, atan2(numV(BASE), numV(BASE+1)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x86:
       TRACEFF("math.ldexp");
       if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         setnumV(BASE-2, ldexp(numV(BASE), numV(BASE+1)));
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x87:
       TRACEFF("math.min");
@@ -1582,10 +1577,10 @@ static inline void execute1(lua_State *L) {
         if (!tvisnum(BASE+NARGS)) goto min_fallback;
         setnumV(BASE, min(numV(BASE), numV(BASE+NARGS)));
       }
-      vm_return(L, BASE[-1].u64, 0, 1);
+      if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       break;
     min_fallback:
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x88:
       TRACEFF("math.max");
@@ -1595,68 +1590,68 @@ static inline void execute1(lua_State *L) {
         if (!tvisnum(BASE+NARGS)) goto max_fallback;
         setnumV(BASE, max(numV(BASE), numV(BASE+NARGS)));
       }
-      vm_return(L, BASE[-1].u64, 0, 1);
+      if (vm_return(L, BASE[-1].u64, 0, 1)) return;
       break;
     max_fallback:
-      fff_fallback(L);
+      if (fff_fallback(L)) return;
       break;
     case 0x89:
       TRACEFF("bit.tobit");
       if (NARGS >= 1 && tvisnum(BASE)) {
         BASE->n = tobit(BASE);
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x8a:
       TRACEFF("bit.bnot");
       if (NARGS >= 1 && tvisnum(BASE)) {
         BASE->n = ~tobit(BASE);
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x8b:
       TRACEFF("bit.bswap");
       if (NARGS >= 1 && tvisnum(BASE)) {
         BASE->n = (int32_t)bswap_32((uint32_t)tobit(BASE));
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x8c:
       TRACEFF("bit.lshift");
       if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         BASE->n = tobit(BASE) << tobit(BASE+1);
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x8d:
       TRACEFF("bit.rshift");
       if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         BASE->n = (int32_t)((uint32_t)tobit(BASE) >> tobit(BASE+1));
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x8e:
       TRACEFF("bit.arshift");
       if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         BASE->n = tobit(BASE) >> tobit(BASE+1);
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x8f:
       TRACEFF("bit.rol");
       if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         uint32_t b = tobit(BASE), n = (uint32_t)tobit(BASE+1) & 31;
         BASE->n = (int32_t)((b << n) | (b >> (32-n)));
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x90:
       TRACEFF("bit.ror");
       if (NARGS >= 2 && tvisnum(BASE) && tvisnum(BASE+1)) {
         uint32_t b = tobit(BASE), n = (uint32_t)tobit(BASE+1) & 31;
         BASE->n = (int32_t)((b << (32-n)) | (b >> n));
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x91:
       TRACEFF("bit.band");
@@ -1669,10 +1664,10 @@ static inline void execute1(lua_State *L) {
           res &= tobit(BASE+NARGS);
         }
         BASE->n = res;
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
         break;
       band_fallback:
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
         break;
       }
     case 0x92:
@@ -1686,10 +1681,10 @@ static inline void execute1(lua_State *L) {
           res |= tobit(BASE+NARGS);
         }
         BASE->n = res;
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
         break;
       bor_fallback:
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
         break;
       }
     case 0x93:
@@ -1703,10 +1698,10 @@ static inline void execute1(lua_State *L) {
           res ^= tobit(BASE+NARGS);
         }
         BASE->n = res;
-        vm_return(L, BASE[-1].u64, 0, 1);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
         break;
       bxor_fallback:
-        fff_fallback(L);
+        if (fff_fallback(L)) return;
         break;
       }
     case 0x94:
@@ -1730,8 +1725,8 @@ static inline void execute1(lua_State *L) {
         assert(BASE+nresults <= mref(L->maxstack, TValue));
         for (i=0; i+start <= end; i++)
           setnumV(BASE+i, strdata(str)[i+start-1]);
-        vm_return(L, BASE[-1].u64, 0, nresults);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, nresults)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x95:
       TRACEFF("string.char");
@@ -1757,8 +1752,8 @@ static inline void execute1(lua_State *L) {
           end = min(end, str->len);
         str = lj_str_new(L, strdata(str)+start-1, max(1+end-start, 0));
         setgcVraw(BASE-2, (GCobj *)str, LJ_TSTR);
-        vm_return(L, BASE[-1].u64, -2, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, -2, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     case 0x97:
     case 0x98:
@@ -1787,19 +1782,14 @@ static inline void execute1(lua_State *L) {
         default: assert(0 && "NYI: fast string operation");
         }
         setgcVraw(BASE, (GCobj *)lj_buf_tostr(buf), LJ_TSTR);
-        vm_return(L, BASE[-1].u64, 0, 1);
-      } else fff_fallback(L);
+        if (vm_return(L, BASE[-1].u64, 0, 1)) return;
+      } else if (fff_fallback(L)) return;
       break;
     default: assert(0 && "INVALID BYTECODE");
     }
   }
-}
-
-/* Execute virtual machine instructions in a tail-recursive loop. */
-static void execute(lua_State *L) {
-  do execute1(L);
-  while (!VMEXIT);
-  VMEXIT = 0;
+  /* Tail recursion. */
+  goto execute;
 }
 
 
@@ -1869,10 +1859,10 @@ static inline void vm_callt(lua_State *L, int offset, int _nargs) {
  *   BASE is restored to the base frame of the previous stack frame.
  *   Return values are copied to BASE..BASE+NRESULTS+MULTRES.
  *
- * Sets VMEXIT if the virtual machine should 'return' on the C stack
+ * Returns true if the virtual machine should 'return' on the C stack
  * i.e. if we are returning from this invocation of the bytecode interpreter.
  */
-static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
+static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) {
   switch (link & FRAME_TYPE) {
   case FRAME_C:
     /* Returning from the VM to C code. */
@@ -1888,9 +1878,9 @@ static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) 
       dst = copyTVs(L, BASE-2, dst, nexpected, nresults);
       TOP = dst; // When returning from C frames, last result is the new TOP.
       BASE -= delta;
-      VMEXIT = 1;
+      return 1;
     }
-    return;
+    break;
   case FRAME_LUA:
     /* Return from a Lua function. */
     PC = (BCIns*)link;
@@ -1906,16 +1896,17 @@ static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) 
       pt = funcproto(funcV(BASE-2));
       TOP = BASE + pt->framesize;
       KBASE = mref(pt->k, void);
+      return 0;
     }
-    return;
+    break;
   case FRAME_VARG:
     /* Return from vararg function: relocate BASE down and resultofs up. */
     {
       int delta = link >> 3;
       BASE -= delta;
-      vm_return(L, BASE[-1].u64, resultofs + delta, nresults);
+      return vm_return(L, BASE[-1].u64, resultofs + delta, nresults);
     }
-    return;
+    break;
   }
   switch (link & FRAME_TYPEP) {
   case FRAME_PCALL:
@@ -1936,9 +1927,9 @@ static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) 
       intptr_t nextlink = BASE[-delta-1].u64; /* Might be clobbered. */
       BASE -= delta; resultofs += delta;
       resultofs--; nresults++; setboolV(BASE+resultofs, 1);
-      vm_return(L, nextlink, resultofs, nresults);
+      return vm_return(L, nextlink, resultofs, nresults);
     }
-    return;
+    break;
   case FRAME_CONT:
     /* Return from metamethod continuation frame: restore PC and caller frame,
        save L and delta for continuation, and invoke continuation. */
@@ -1970,10 +1961,12 @@ static void vm_return(lua_State *L, uint64_t link, int resultofs, int nresults) 
         KBASE = mref(pt->k, void);
         (*cont)();
       }
+      return 0;
     }
-    return;
+    break;
   }
   assert(0 && "NYI: Unsupported case in vm_return");
+  return 0;
 }
 
 
@@ -1999,8 +1992,11 @@ static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs) {
  * functions are peculiar in multiple ways:
  *  - they use the stack space BASE-2..BASE+NARGS
  *  - they can yield to retries and tailcalls
+ *
+ * Returns the value of vm_return, potentially signaling the caller to return
+ * to a C frame.
  */
-static void fff_fallback(lua_State *L) {
+int fff_fallback(lua_State *L) {
   uint64_t link = BASE[-1].u64;
   TOP = BASE + NARGS;
   assert(TOP+1+LUA_MINSTACK <= mref(L->maxstack, TValue));
@@ -2017,12 +2013,12 @@ static void fff_fallback(lua_State *L) {
     } else {
       assert(0 && "NYI: fff_fallback tail call in non-Lua frame.");
     }
-    break;
+    return 0;
   case  0: /* FFH_RETRY */
     PC--; /* Retry the operation. */
-    break;
+    return 0;
   default: /* FFH_RES(n) */
-    vm_return(L, link, -2, res-1); /* res is number of results + 1 */
+    return vm_return(L, link, -2, res-1); /* res is number of results + 1 */
   }
 }
 
