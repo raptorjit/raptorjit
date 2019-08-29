@@ -58,6 +58,7 @@ static inline void vm_callt(lua_State *L, int offset, int _nargs);
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 static int fff_fallback(lua_State *L);
+static inline void vm_dispatch(lua_State *L, BCIns curins);
 static inline void vm_hotloop(lua_State *L);
 static inline void vm_exec_trace(lua_State *L, BCReg traceno);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
@@ -254,15 +255,11 @@ static inline void branchPC(int offset)
 
 /* Execute virtual machine instructions in a tail-recursive loop. */
 void execute(lua_State *L) {
-  uint8_t *dispmode = &G(L)->dispatchmode;
   BCIns curins;
  execute:
   insctr++;
   curins = *PC++;
-  if (*dispmode & DISPMODE_REC && OP < GG_LEN_SDISP)
-    lj_dispatch_ins(L, PC);
-  else if (*dispmode & DISPMODE_CALL)
-    lj_dispatch_call(L, PC);
+  vm_dispatch(L, curins);
   switch (OP) {
   case BC_ISLT:
     /* ISLT: Take following JMP instruction if A < D. */
@@ -1048,9 +1045,7 @@ void execute(lua_State *L) {
     break;
   case BC_FORL:
     TRACE("FORL");
-    /* Hotcount if JIT is on, but not while recording. */
-    if ((*dispmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT)
-      vm_hotloop(L);
+    vm_hotloop(L);
   case BC_JFORL:
     if (OP == BC_JFORL) TRACE("JFORL");
   case BC_IFORL:
@@ -1104,9 +1099,7 @@ void execute(lua_State *L) {
     break;
   case BC_ITERL:
     TRACE("ITERL");
-    /* Hotcount if JIT is on, but not while recording. */
-    if ((*dispmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT)
-      vm_hotloop(L);
+    vm_hotloop(L);
   case BC_IITERL:
     if (OP == BC_IITERL) TRACE("IITERL");
     if (!tvisnil(BASE+A)) {
@@ -1124,9 +1117,7 @@ void execute(lua_State *L) {
     break;
   case BC_LOOP:
     TRACE("LOOP");
-    /* Hotcount if JIT is on, but not while recording. */
-    if ((*dispmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT)
-      vm_hotloop(L);
+    vm_hotloop(L);
   case BC_ILOOP:
     if (OP == BC_ILOOP) TRACE("ILOOP");
     break;
@@ -2033,6 +2024,21 @@ int fff_fallback(lua_State *L) {
 }
 
 
+/* -- Hook and recording dispatch ----------------------------------------- */
+
+/* Invoke hooks for or record the next instruction to be executed. */
+static inline void vm_dispatch(lua_State *L, BCIns curins) {
+  global_State *g = G(L);
+  uint8_t mode = g->dispatchmode;
+  if (hook_active(g) & HOOK_EVENTMASK)
+    assert(0 && "NYI: active hooks");
+  if (mode & DISPMODE_REC && OP < GG_LEN_SDISP)
+    lj_dispatch_ins(L, PC);
+  else if (mode & DISPMODE_CALL)
+    lj_dispatch_call(L, PC);
+}
+
+
 /* -- JIT trace recorder -------------------------------------------------- */
 
 /* Hot loop detection: invoke trace recorder if loop body is hot.
@@ -2041,13 +2047,16 @@ int fff_fallback(lua_State *L) {
  * (and executed), and it need not continue executing the current instruction.
  */
 static inline void vm_hotloop(lua_State *L) {
-  jit_State *J = L2J(L);
-  HotCount old_count = hotcount_get(L2GG(L), PC);
-  HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_LOOP);
-  if (new_count > old_count) {
-    /* Hot loop counter underflow. */
-    vm_savepc(L, PC);
-    lj_trace_hot(J, PC);
+  /* Hotcount if JIT is on, but not while recording. */
+  if ((G(L)->dispatchmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
+    jit_State *J = L2J(L);
+    HotCount old_count = hotcount_get(L2GG(L), PC);
+    HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_LOOP);
+    if (new_count > old_count) {
+      /* Hot loop counter underflow. */
+      vm_savepc(L, PC);
+      lj_trace_hot(J, PC);
+    }
   }
 }
 
