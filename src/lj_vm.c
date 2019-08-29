@@ -261,6 +261,8 @@ void execute(lua_State *L) {
   curins = *PC++;
   if (*dispmode & DISPMODE_REC && OP < GG_LEN_SDISP)
     lj_dispatch_ins(L, PC);
+  else if (*dispmode & DISPMODE_CALL)
+    lj_dispatch_call(L, PC);
   switch (OP) {
   case BC_ISLT:
     /* ISLT: Take following JMP instruction if A < D. */
