@@ -142,19 +142,11 @@ trace_exit:
         lea rax, [rax+256]      ;state->spill
         mov rdx, [r14-8]        ;tcs relative to dispatch
         mov rdx, [rdx+0]        ;tcs->rsp
-        mov rbx, rsp
-        sub rbx, rdx
-        mov rcx, 0
 copy_spill:
-        cmp rbx, rbx
-        jz return
-        mov rax, [rdx+rcx]
-        mov [rax+rcx], rax
-        sub rbx, 8
-        add rcx, 8
+        cmp rsp, rdx
+        je trace_return         ; Return to lj_vm_trace_call
+        add rsp, 8
+        mov rcx, [rsp]
+        mov [rax], rcx
+        add rax, 8
         jmp copy_spill
-
-;;; Return to lj_vm_trace_call
-return:
-        mov rsp, rdx
-        jmp trace_return
