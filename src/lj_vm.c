@@ -2140,7 +2140,7 @@ void lj_cont_stitch(void) {
   if (prev && prev->traceno != prev->link) {
     if (prev->link) {
       /* Jump to stitched trace. */
-      assert(0 && "NYI: jump to stitched trace.");
+      vm_exec_trace(L, prev->link);
     } else {
       /* Stitch a new trace to the previous trace. */
       J->L = L;
