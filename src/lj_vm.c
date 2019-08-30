@@ -2074,9 +2074,10 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   GCtrace *trace = gcrefp(J->trace[traceno], GCtrace);
   TraceCallState tcs = {};
   int status;
+  GCfunc *fn;
   uint64_t link;
+  BCIns *retpc;
   int delta;
-  GCproto *pt;
   /* Setup trace context. */
   J2G(J)->jit_base = BASE;
   J2G(J)->tmpbuf.L = L;
@@ -2090,7 +2091,7 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
     /* Record which trace exited to the interpreter. */
     J2G(J)->lasttrace = STATE;
   }
-  /* Successful exit, restore interpreter state. */
+  /* Restore interpreter state. */
   if (tcs.handler == TRACE_EXIT) {
     J->L = L;
     J->parent = STATE;
@@ -2105,6 +2106,7 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
     status = (int)tcs.state.gpr[GPR_RET];
     PC = (BCIns*)tcs.state.gpr[GPR_PC];
   }
+  /* Restore NARGS, MULTRES. */
   if (status > 0) {
     /* Status is MULTRES+1. */
     NARGS = MULTRES = status-1;
@@ -2112,16 +2114,23 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
     /* Error returned from trace, rethrow from the right C frame. */
     lj_err_throw(L, -status);
   }
-  /* Set TOP/KBASE according to next Lua function prototype. */
-  link = BASE[-1].u64;
-  if ((link & FRAME_TYPE) == FRAME_LUA) {
-    pt = funcproto(funcV(BASE-2));
+  /* Restore KBASE. */
+  fn = funcV(BASE-2);
+  if (isluafunc(fn)) {
+    KBASE = mref(funcproto(fn)->k, void);
   } else {
-    delta = link >> 3;
-    pt = funcproto(funcV(BASE-delta-2));
+    link = BASE[-1].u64;
+    if ((link & FRAME_TYPE) == FRAME_LUA) {
+      /* Set KBASE for Lua function below. */
+      retpc = (BCIns *)link;
+      delta = bc_a(*(retpc-1));
+      fn = funcV(BASE-delta-2-2);
+      KBASE = mref(funcproto(fn)->k, void);
+    } else {
+      /* Frame stitching continuation. */
+      assert((link & FRAME_TYPE) == FRAME_CONT);
+    }
   }
-  TOP = BASE + pt->framesize;
-  KBASE = mref(pt->k, void);
   /* Return to interpreter. */
   J2G(J)->jit_base = NULL;
   STATE = ~LJ_VMST_INTERP;
