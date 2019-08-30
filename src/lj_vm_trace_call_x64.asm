@@ -43,13 +43,19 @@ lj_vm_trace_call:
         mov r14, [rax+14*8]     ;GPR_DISPATCH
         mov rdx, [rax+2*8]      ;GPR_BASE
 
-;;; Save rsp minus offset for return address (call) into tcs.
-        lea rax, [rsp-8]
-        mov [rdi+0], rax        ;tcs->rsp = rsp-8
+;;; Prepare stack for use by mcode (JITed code uses [rsp+0]).
+        lea rsp, [rsp-8]
 
-;;; Call JITed code, which will jump to exit handler, which in turn will
-;;; return here.
-        call rsi                ;mcode
+;;; Save rsp into tcs.
+        mov [rdi+0], rsp        ;tcs->rsp = rsp
+
+;;; Jump to JITed code, which will jump to exit handler, which in turn will
+;;; jump back to trace_return (below).
+        jmp rsi                 ;mcode
+
+trace_return:
+;;; Restore stack.
+        lea rsp, [rsp+8]
 
 ;;; Restore callee-save registers.
         pop r15
@@ -71,7 +77,8 @@ lj_vm_exit_interp:
         mov rax, [r14-8]        ;tcs relative to dispatch
         mov dword [rax+8], 1    ;tcs->handler = TRACE_EXIT_INTERP
         pop rax
-        jmp lj_vm_exit
+
+        jmp trace_exit
 
 ;;; Called from an exit stub with the exit number on the stack.
 ;;; The 16 bit exit number is stored with two (sign-extended) push imm8.
@@ -90,10 +97,10 @@ lj_vm_exit_handler:
         pop rax
         lea rsp, [rsp+16]
 
-        jmp lj_vm_exit
+        jmp trace_exit
 
 ;;; Build tcs->state and restore stack for return to lj_vm_trace_call.
-lj_vm_exit:
+trace_exit:
 ;;; Copy register state.
         push rax
         mov rax, [r14-8]        ;tcs relative to dispatch
@@ -150,4 +157,4 @@ copy_spill:
 ;;; Return to lj_vm_trace_call
 return:
         mov rsp, rdx
-        ret
+        jmp trace_return
