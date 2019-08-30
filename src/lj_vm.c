@@ -1121,7 +1121,10 @@ void execute(lua_State *L) {
   case BC_ILOOP:
     if (OP == BC_ILOOP) TRACE("ILOOP");
     break;
-  case BC_JLOOP: assert(0 && "NYI BYTECODE: JLOOP");
+  case BC_JLOOP:
+    TRACE("JLOOP");
+    vm_exec_trace(L, D);
+    break;
   case BC_JMP:
     TRACE("JMP");
     branchPC(D);
