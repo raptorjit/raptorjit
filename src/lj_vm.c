@@ -1084,16 +1084,15 @@ void execute(lua_State *L) {
       lj_meta_for(L, state);
       /* Copy loop index to stack. */
       setnumV(ext, idx->n);
-      /* Always branch in JFORI. */
-      if (OP == BC_JFORI)
-        branchPC(D);
       /* Check for termination */
       if ((step->n >= 0 && idx->n > stop->n) ||
           (step->n <  0 && stop->n > idx->n)) {
-        if (OP == BC_FORI)
-          branchPC(D);
-        else
-          vm_exec_trace(L, bc_d(*PC));
+        branchPC(D);
+      } else if (OP == BC_JFORI) {
+        /* Always branch in JFORI. */
+        branchPC(D);
+        /* Continue with trace in found in JFORL bytecode. */
+        vm_exec_trace(L, bc_d(*(PC-1)));
       }
     }
     break;
