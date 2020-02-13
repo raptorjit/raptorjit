@@ -2033,6 +2033,8 @@ int fff_fallback(lua_State *L) {
 static inline void vm_dispatch(lua_State *L, BCIns curins) {
   global_State *g = G(L);
   uint8_t mode = g->dispatchmode;
+  /* NB: cframe->multres is used by lj_dispatch_ins. */
+  ((CFrame *) cframe_raw(L->cframe))->multres = MULTRES + 1;
   if (hook_active(g) & HOOK_EVENTMASK)
     assert(0 && "NYI: active hooks");
   if (mode & DISPMODE_REC && OP < GG_LEN_SDISP)
@@ -2146,6 +2148,8 @@ void lj_cont_stitch(void) {
   BCIns curins = *(PC-1);
   GCtrace *prev = (GCtrace *)gcV(CONT_BASE-5);
   TValue *callbase = BASE+A;
+  /* NB: cframe->multres is used by lj_dispatch_stitch. */
+  ((CFrame *) cframe_raw(L->cframe))->multres = MULTRES + 1;
   /* Copy results. */
   copyTVs(L, callbase, CONT_BASE+CONT_OFS, MULTRES, B-1);
   /* Have a trace, and it is not blacklisted? */
