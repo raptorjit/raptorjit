@@ -108,12 +108,13 @@ trace_exit:
         mov [rax+248], r15
         mov [rax+240], r14
         mov [rax+232], r13
-        mov [rax+216], r12
-        mov [rax+208], r11
-        mov [rax+200], r10
-        mov [rax+192], r9
-        mov [rax+184], r8
-        mov [rax+176], rdi
+        mov [rax+224], r12
+        mov [rax+216], r11
+        mov [rax+208], r10
+        mov [rax+200], r9
+        mov [rax+192], r8
+        mov [rax+184], rdi
+        mov [rax+176], rsi
         mov [rax+168], rbp
         mov [rax+160], rsp
         mov [rax+152], rbx
