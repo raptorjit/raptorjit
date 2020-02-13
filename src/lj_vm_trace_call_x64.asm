@@ -145,8 +145,8 @@ trace_exit:
 copy_spill:
         cmp rsp, rdx
         je trace_return         ; Return to lj_vm_trace_call
-        add rsp, 8
         mov rcx, [rsp]
+        add rsp, 8
         mov [rax], rcx
         add rax, 8
         jmp copy_spill
