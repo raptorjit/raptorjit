@@ -2246,6 +2246,8 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
   L2J(L)->L = L;
+  /* Save PC to new CFrame (needed for error handling in f). */
+  vm_savepc(L, PC);
   /* Setup "catch" jump buffer for a protected call. */
   res = _setjmp(cf.jb);
   if (res < 0) {
