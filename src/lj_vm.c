@@ -1533,7 +1533,7 @@ void execute(lua_State *L) {
     case 0x79:
       TRACEFF("math.tan");
       if (NARGS >= 1 && tvisnum(BASE)) {
-        setnumV(BASE-2, cos(numV(BASE)));
+        setnumV(BASE-2, tan(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
