@@ -1719,11 +1719,11 @@ void execute(lua_State *L) {
         int end = NARGS >= 3 ? numV(BASE+2) : start;
         int i, nresults;
         if (start < 0)
-          start = max(start + str->len+1, 1);
+          start = max(start + (int)str->len+1, 1);
         else
           start = max(min(start, str->len+1), 1);
         if (end < 0)
-          end = max(end + str->len+1, 0);
+          end = max(end + (int)str->len+1, 0);
         else
           end = min(end, str->len);
         nresults = max(1+end-start, 0);
@@ -1748,11 +1748,11 @@ void execute(lua_State *L) {
         int start = numV(BASE+1);
         int end = NARGS > 2 ? numV(BASE+2) : -1;
         if (start < 0)
-          start = max(start + str->len+1, 1);
+          start = max(start + (int)str->len+1, 1);
         else
           start = max(min(start, str->len+1), 1);
         if (end < 0)
-          end = max(end + str->len+1, 0);
+          end = max(end + (int)str->len+1, 0);
         else
           end = min(end, str->len);
         str = lj_str_new(L, strdata(str)+start-1, max(1+end-start, 0));
