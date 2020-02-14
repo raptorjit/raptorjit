@@ -140,14 +140,14 @@ trace_exit:
         movsd qword [rax+0], xmm0
 
 ;;; Copy spill slots.
-        lea rax, [rax+256]      ;state->spill
+        lea rax, [rax+264]      ;state->spill+8 (first two slots are reserved)
         mov rdx, [r14-8]        ;tcs relative to dispatch
         mov rdx, [rdx+0]        ;tcs->rsp
 copy_spill:
         cmp rsp, rdx
         je trace_return         ; Return to lj_vm_trace_call
-        mov rcx, [rsp]
         add rsp, 8
+        mov rcx, [rsp]
         mov [rax], rcx
         add rax, 8
         jmp copy_spill
