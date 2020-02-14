@@ -1549,7 +1549,7 @@ void execute(lua_State *L) {
     case 0x81:
       TRACEFF("math.modf");
       if (NARGS >= 1 && tvisnum(BASE)) {
-        setnumV(BASE, modf(numV(BASE), &BASE[1].n));
+        setnumV(BASE+1, modf(numV(BASE), &BASE->n));
         if (vm_return(L, BASE[-1].u64, 0, 2)) return;
       } else if (fff_fallback(L)) return;
       break;
