@@ -1151,6 +1151,8 @@ void execute(lua_State *L) {
       copyTV(L, BASE-2, oldbase-2);
       BASE[-1].u64 = FRAME_VARG + ((BASE - oldbase) << 3);
       copyTVs(L, BASE, oldbase, pt->numparams, NARGS);
+      /* Fill moved args with nil. */
+      copyTVs(L, oldbase, NULL, min(pt->numparams, NARGS), 0);
       TOP = BASE + pt->framesize;
       /* Set constant pool address. */
       KBASE = mref(pt->k, void);
