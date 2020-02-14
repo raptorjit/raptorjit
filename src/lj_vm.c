@@ -1721,7 +1721,7 @@ void execute(lua_State *L) {
         if (start < 0)
           start = max(start + str->len+1, 1);
         else
-          start = max(min(start, str->len), 1);
+          start = max(min(start, str->len+1), 1);
         if (end < 0)
           end = max(end + str->len+1, 0);
         else
