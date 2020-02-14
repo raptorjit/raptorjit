@@ -2055,12 +2055,13 @@ static inline void vm_dispatch(lua_State *L, BCIns curins) {
 static inline void vm_hotloop(lua_State *L) {
   /* Hotcount if JIT is on, but not while recording. */
   if ((G(L)->dispatchmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
-    jit_State *J = L2J(L);
     HotCount old_count = hotcount_get(L2GG(L), PC);
     HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_LOOP);
     if (new_count > old_count) {
       /* Hot loop counter underflow. */
+      jit_State *J = L2J(L);
       vm_savepc(L, PC);
+      J->L = L;
       lj_trace_hot(J, PC);
     }
   }
