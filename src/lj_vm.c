@@ -2155,7 +2155,7 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
       fn = funcV(BASE-delta-2-2);
       KBASE = mref(funcproto(fn)->k, void);
     } else {
-      /* Frame stitching continuation. */
+      /* Trace stitching continuation. */
       assert((link & FRAME_TYPE) == FRAME_CONT);
     }
   }
