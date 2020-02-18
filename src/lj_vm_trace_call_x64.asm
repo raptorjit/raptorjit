@@ -3,6 +3,7 @@
 
 global lj_vm_trace_call
 global lj_vm_exit_interp
+global lj_vm_exit_interp_notrack
 global lj_vm_exit_handler
 
 section .data
@@ -76,6 +77,15 @@ lj_vm_exit_interp:
         push rax
         mov rax, [r14-8]        ;tcs relative to dispatch
         mov dword [rax+8], 1    ;tcs->handler = TRACE_EXIT_INTERP
+        pop rax
+
+        jmp trace_exit
+
+;;; Called from an exit stub with empty stack.
+lj_vm_exit_interp_notrack:
+        push rax
+        mov rax, [r14-8]        ;tcs relative to dispatch
+        mov dword [rax+8], 2    ;tcs->handler = TRACE_EXIT_INTERP_NOTRACK
         pop rax
 
         jmp trace_exit

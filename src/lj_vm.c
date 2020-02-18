@@ -60,6 +60,7 @@ static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 static int fff_fallback(lua_State *L);
 static inline void vm_dispatch(lua_State *L, BCIns curins);
 static inline void vm_hotloop(lua_State *L);
+static inline void vm_hotcall(lua_State *L);
 static inline void vm_exec_trace(lua_State *L, BCReg traceno);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline void vm_savepc(lua_State *L, const BCIns *pc);
@@ -1130,6 +1131,11 @@ void execute(lua_State *L) {
     break;
   case BC_FUNCF:
     TRACE("FUNCF");
+    vm_hotcall(L);
+  case BC_IFUNCF:
+    if (OP == BC_IFUNCF) TRACE("IFUNCF");
+  case BC_JFUNCF:
+    if (OP == BC_JFUNCF) TRACE("JFUNCF");
     {
       GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
       TOP = BASE + pt->framesize;
@@ -1137,9 +1143,9 @@ void execute(lua_State *L) {
       /* Fill missing args with nil. */
       if (A > NARGS) copyTVs(L, BASE+NARGS, NULL, A-NARGS, 0);
     }
+    if (OP == BC_JFUNCF)
+      vm_exec_trace(L, D);
     break;
-  case BC_IFUNCF: assert(0 && "NYI BYTECODE: IFUNCF");
-  case BC_JFUNCF: assert(0 && "NYI BYTECODE: JFUNCF");
   case BC_FUNCV:
     TRACE("FUNCV");
     {
@@ -2047,11 +2053,7 @@ static inline void vm_dispatch(lua_State *L, BCIns curins) {
 
 /* -- JIT trace recorder -------------------------------------------------- */
 
-/* Hot loop detection: invoke trace recorder if loop body is hot.
- *
- * A non-zero return value indicates to the caller that a trace was recorded
- * (and executed), and it need not continue executing the current instruction.
- */
+/* Hot loop detection: invoke trace recorder if loop body is hot. */
 static inline void vm_hotloop(lua_State *L) {
   /* Hotcount if JIT is on, but not while recording. */
   if ((G(L)->dispatchmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
@@ -2063,6 +2065,23 @@ static inline void vm_hotloop(lua_State *L) {
       vm_savepc(L, PC);
       J->L = L;
       lj_trace_hot(J, PC);
+    }
+  }
+}
+
+/* Hot call detection: invoke trace recorder if function is hot. */
+static inline void vm_hotcall(lua_State *L) {
+  /* Hotcount if JIT is on, but not while recording. */
+  if ((G(L)->dispatchmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
+    HotCount old_count = hotcount_get(L2GG(L), PC);
+    HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_CALL);
+    if (new_count > old_count) {
+      /* Hot call counter underflow. */
+      vm_savepc(L, PC);
+      TOP = BASE + NARGS;
+      uintptr_t hotcall = (uintptr_t)PC | 1; /* LSB set: marker for hot call. */
+      lj_dispatch_call(L, (BCIns *)hotcall);
+      vm_savepc(L, 0); /* Invalidate for subsequent line hook. */
     }
   }
 }
@@ -2343,9 +2362,6 @@ void lj_vm_record(void)   { assert(0 && "NYI"); }
 void lj_vm_inshook(void)  { assert(0 && "NYI"); }
 void lj_vm_rethook(void)  { assert(0 && "NYI"); }
 void lj_vm_callhook(void) { assert(0 && "NYI"); }
-
-/* Trace exit handling. */
-void lj_vm_exit_interp_notrack(void) { assert(0 && "NYI"); }
 
 /* Internal math helper functions. */
 double lj_vm_floor(double a) { return floor(a); }
