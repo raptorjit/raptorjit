@@ -69,7 +69,7 @@ static inline int32_t tobit(TValue *num);
 void lj_ffh_coroutine_wrap_err(lua_State *L, lua_State *co);
 
 /* Simple debug utility. */
-#if 1
+#if 0
 static void printstack(lua_State *L)
 {
   int i;
