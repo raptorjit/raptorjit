@@ -2104,6 +2104,8 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   uint64_t link;
   BCIns *retpc;
   int delta;
+  /* Bail (nop) if currently recording a trace. */
+  if (G(L)->dispatchmode & DISPMODE_REC) return;
   /* Setup trace context. */
   J2G(J)->jit_base = BASE;
   J2G(J)->tmpbuf.L = L;
