@@ -1138,8 +1138,9 @@ void execute(lua_State *L) {
     if (OP == BC_JFUNCF) TRACE("JFUNCF");
     {
       GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
-      TOP = BASE + pt->framesize;
+      TOP = BASE + A;
       KBASE = mref(pt->k, void);
+      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
       /* Fill missing args with nil. */
       if (A > NARGS) copyTVs(L, BASE+NARGS, NULL, A-NARGS, 0);
     }
@@ -1150,6 +1151,9 @@ void execute(lua_State *L) {
     TRACE("FUNCV");
     {
       GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+      TOP = BASE + A;
+      KBASE = mref(pt->k, void);
+      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
       /* Save base of frame containing all parameters. */
       TValue *oldbase = BASE;
       /* Base for new frame containing only fixed parameters. */
@@ -1159,9 +1163,6 @@ void execute(lua_State *L) {
       copyTVs(L, BASE, oldbase, pt->numparams, NARGS);
       /* Fill moved args with nil. */
       copyTVs(L, oldbase, NULL, min(pt->numparams, NARGS), 0);
-      TOP = BASE + pt->framesize;
-      /* Set constant pool address. */
-      KBASE = mref(pt->k, void);
     }      
     break;
   case BC_IFUNCV: assert(0 && "NYI BYTECODE: IFUNCV");
@@ -1175,9 +1176,8 @@ void execute(lua_State *L) {
     {
       int nresults, resultofs;
       lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
-      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
-      assert(OP == BC_FUNCC); /* XXX */
       TOP = BASE + NARGS;
+      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
       STATE = ~LJ_VMST_C;
       nresults = (*f)(L);
       STATE = ~LJ_VMST_INTERP;
