@@ -193,7 +193,7 @@ Host_XCFLAGS+= -DLUAJIT_OS=LUAJIT_OS_LINUX
 ##############################################################################
 
 LJVM_C= lj_vm.c
-LJVM_O= lj_vm.o lj_vm_ffi_call_x64.o
+LJVM_O= lj_vm.o lj_vm_ffi_call_x64.o lj_vm_trace_call_x64.o
 LJVM_BOUT= $(LJVM_C)
 LJVM_MODE= elfasm
 

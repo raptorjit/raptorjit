@@ -1,5 +1,7 @@
 /*
 ** RaptorJIT virtual machine bytecode interpreter.
+** Copyright (C) 2018-2019 Luke Gorrie, Max Rottenkolber
+** See Copyright Notice in luajit.h
 */
 
 #include <assert.h>
@@ -21,6 +23,9 @@
 #include "lj_meta.h"
 #include "lj_func.h"
 #include "lj_buf.h"
+#include "lj_trace.h"
+#include "lj_err.h"
+#include "lj_vm_tcs.h"
 
 /* Count of executed instructions for debugger prosperity. */
 static uint64_t insctr;
@@ -52,7 +57,11 @@ static inline void vm_call(lua_State *L, TValue *callbase, int _nargs, int ftp);
 static inline void vm_callt(lua_State *L, int offset, int _nargs);
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
-int fff_fallback(lua_State *L);
+static int fff_fallback(lua_State *L);
+static inline void vm_dispatch(lua_State *L, BCIns curins);
+static inline void vm_hotloop(lua_State *L);
+static inline void vm_hotcall(lua_State *L);
+static inline void vm_exec_trace(lua_State *L, BCReg traceno);
 int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline void vm_savepc(lua_State *L, const BCIns *pc);
 static inline int32_t tobit(TValue *num);
@@ -251,6 +260,7 @@ void execute(lua_State *L) {
  execute:
   insctr++;
   curins = *PC++;
+  vm_dispatch(L, curins);
   switch (OP) {
   case BC_ISLT:
     /* ISLT: Take following JMP instruction if A < D. */
@@ -1036,23 +1046,37 @@ void execute(lua_State *L) {
     break;
   case BC_FORL:
     TRACE("FORL");
+    vm_hotloop(L);
+  case BC_JFORL:
+    if (OP == BC_JFORL) TRACE("JFORL");
+  case BC_IFORL:
+    if (OP == BC_IFORL) TRACE("IFORL");
     {
       TValue *state = BASE + A;
       TValue *idx = state, *stop = state+1, *step = state+2, *ext = state+3;
+      if (OP == BC_JFORL) {
+        assert(tvisnum(stop));
+        assert(tvisnum(step));
+      } else if (!tvisnum(idx) || !tvisnum(stop) || !tvisnum(step))
+        lj_meta_for(L, state);
       /* Update loop index. */
       setnumV(idx, idx->n + step->n);
       /* Copy loop index to stack. */
       setnumV(ext, idx->n);
       /* Check for termination */
       if ((step->n >= 0 && idx->n <= stop->n) ||
-          (step->n <  0 && stop->n <= idx->n))
-        branchPC(D);
-      /* XXX hotloop */
+          (step->n <  0 && stop->n <= idx->n)) {
+        if (OP == BC_JFORL)
+          vm_exec_trace(L, D);
+        else
+          branchPC(D);
+      }
     }
     break;
-  case BC_JFORI:  assert(0 && "NYI BYTECODE: JFORI");
+  case BC_JFORI:
+    TRACE("JFORI");
   case BC_FORI:
-    TRACE("FORI");
+    if (OP == BC_FORI) TRACE("FORI");
     vm_savepc(L, PC);
     {
       TValue *state = BASE + A;
@@ -1063,15 +1087,19 @@ void execute(lua_State *L) {
       setnumV(ext, idx->n);
       /* Check for termination */
       if ((step->n >= 0 && idx->n > stop->n) ||
-          (step->n <  0 && stop->n > idx->n))
+          (step->n <  0 && stop->n > idx->n)) {
         branchPC(D);
+      } else if (OP == BC_JFORI) {
+        /* Always branch in JFORI. */
+        branchPC(D);
+        /* Continue with trace in found in JFORL bytecode. */
+        vm_exec_trace(L, bc_d(*(PC-1)));
+      }
     }
     break;
-  case BC_IFORL:  assert(0 && "NYI BYTECODE: IFORL");
-  case BC_JFORL:  assert(0 && "NYI BYTECODE: JFORL");
   case BC_ITERL:
     TRACE("ITERL");
-    /* XXX hotloop */
+    vm_hotloop(L);
   case BC_IITERL:
     if (OP == BC_IITERL) TRACE("IITERL");
     if (!tvisnil(BASE+A)) {
@@ -1079,14 +1107,23 @@ void execute(lua_State *L) {
       branchPC(D);
       BASE[A-1] = *(BASE+A);
     }
+    break;
   case BC_JITERL:
-    if (OP == BC_JITERL) assert(0 && "NYI BYTECODE: JITERL");
+    TRACE("JITERL");
+    if (!tvisnil(BASE+A)) {
+      BASE[A-1] = *(BASE+A);
+      vm_exec_trace(L, D);
+    }
     break;
   case BC_LOOP:
+    TRACE("LOOP");
+    vm_hotloop(L);
   case BC_ILOOP:
+    if (OP == BC_ILOOP) TRACE("ILOOP");
+    break;
   case BC_JLOOP:
-    TRACE("*LOOP");
-    /* XXX hotloop */
+    TRACE("JLOOP");
+    vm_exec_trace(L, D);
     break;
   case BC_JMP:
     TRACE("JMP");
@@ -1094,20 +1131,29 @@ void execute(lua_State *L) {
     break;
   case BC_FUNCF:
     TRACE("FUNCF");
+    vm_hotcall(L);
+  case BC_IFUNCF:
+    if (OP == BC_IFUNCF) TRACE("IFUNCF");
+  case BC_JFUNCF:
+    if (OP == BC_JFUNCF) TRACE("JFUNCF");
     {
       GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
-      TOP = BASE + pt->framesize;
+      TOP = BASE + A;
       KBASE = mref(pt->k, void);
+      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
       /* Fill missing args with nil. */
       if (A > NARGS) copyTVs(L, BASE+NARGS, NULL, A-NARGS, 0);
     }
+    if (OP == BC_JFUNCF)
+      vm_exec_trace(L, D);
     break;
-  case BC_IFUNCF: assert(0 && "NYI BYTECODE: IFUNCF");
-  case BC_JFUNCF: assert(0 && "NYI BYTECODE: JFUNCF");
   case BC_FUNCV:
     TRACE("FUNCV");
     {
       GCproto *pt = (GCproto*)((intptr_t)(PC-1) - sizeof(GCproto));
+      TOP = BASE + A;
+      KBASE = mref(pt->k, void);
+      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
       /* Save base of frame containing all parameters. */
       TValue *oldbase = BASE;
       /* Base for new frame containing only fixed parameters. */
@@ -1115,9 +1161,8 @@ void execute(lua_State *L) {
       copyTV(L, BASE-2, oldbase-2);
       BASE[-1].u64 = FRAME_VARG + ((BASE - oldbase) << 3);
       copyTVs(L, BASE, oldbase, pt->numparams, NARGS);
-      TOP = BASE + pt->framesize;
-      /* Set constant pool address. */
-      KBASE = mref(pt->k, void);
+      /* Fill moved args with nil. */
+      copyTVs(L, oldbase, NULL, min(pt->numparams, NARGS), 0);
     }      
     break;
   case BC_IFUNCV: assert(0 && "NYI BYTECODE: IFUNCV");
@@ -1131,9 +1176,8 @@ void execute(lua_State *L) {
     {
       int nresults, resultofs;
       lua_CFunction *f = &funcV(BASE-2)->c.f; /* C function pointer */
-      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
-      assert(OP == BC_FUNCC); /* XXX */
       TOP = BASE + NARGS;
+      assert(TOP+LUA_MINSTACK <= mref(L->maxstack, TValue));
       STATE = ~LJ_VMST_C;
       nresults = (*f)(L);
       STATE = ~LJ_VMST_INTERP;
@@ -1495,7 +1539,7 @@ void execute(lua_State *L) {
     case 0x79:
       TRACEFF("math.tan");
       if (NARGS >= 1 && tvisnum(BASE)) {
-        setnumV(BASE-2, cos(numV(BASE)));
+        setnumV(BASE-2, tan(numV(BASE)));
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
       } else if (fff_fallback(L)) return;
       break;
@@ -1511,7 +1555,7 @@ void execute(lua_State *L) {
     case 0x81:
       TRACEFF("math.modf");
       if (NARGS >= 1 && tvisnum(BASE)) {
-        setnumV(BASE, modf(numV(BASE), &BASE[1].n));
+        setnumV(BASE+1, modf(numV(BASE), &BASE->n));
         if (vm_return(L, BASE[-1].u64, 0, 2)) return;
       } else if (fff_fallback(L)) return;
       break;
@@ -1681,11 +1725,11 @@ void execute(lua_State *L) {
         int end = NARGS >= 3 ? numV(BASE+2) : start;
         int i, nresults;
         if (start < 0)
-          start = max(start + str->len+1, 1);
+          start = max(start + (int)str->len+1, 1);
         else
-          start = max(min(start, str->len), 1);
+          start = max(min(start, str->len+1), 1);
         if (end < 0)
-          end = max(end + str->len+1, 0);
+          end = max(end + (int)str->len+1, 0);
         else
           end = min(end, str->len);
         nresults = max(1+end-start, 0);
@@ -1710,11 +1754,11 @@ void execute(lua_State *L) {
         int start = numV(BASE+1);
         int end = NARGS > 2 ? numV(BASE+2) : -1;
         if (start < 0)
-          start = max(start + str->len+1, 1);
+          start = max(start + (int)str->len+1, 1);
         else
           start = max(min(start, str->len+1), 1);
         if (end < 0)
-          end = max(end + str->len+1, 0);
+          end = max(end + (int)str->len+1, 0);
         else
           end = min(end, str->len);
         str = lj_str_new(L, strdata(str)+start-1, max(1+end-start, 0));
@@ -1990,6 +2034,162 @@ int fff_fallback(lua_State *L) {
 }
 
 
+/* -- Hook and recording dispatch ----------------------------------------- */
+
+/* Invoke hooks for or record the next instruction to be executed. */
+static inline void vm_dispatch(lua_State *L, BCIns curins) {
+  global_State *g = G(L);
+  uint8_t mode = g->dispatchmode;
+  if (hook_active(g) & HOOK_EVENTMASK)
+    assert(0 && "NYI: active hooks");
+  if (mode & DISPMODE_REC && OP < GG_LEN_SDISP) {
+    /* NB: cframe->multres is used by lj_dispatch_ins. */
+    ((CFrame *) cframe_raw(L->cframe))->multres = MULTRES + 1;
+    lj_dispatch_ins(L, PC);
+  } else if (mode & DISPMODE_CALL)
+    lj_dispatch_call(L, PC);
+}
+
+
+/* -- JIT trace recorder -------------------------------------------------- */
+
+/* Hot loop detection: invoke trace recorder if loop body is hot. */
+static inline void vm_hotloop(lua_State *L) {
+  /* Hotcount if JIT is on, but not while recording. */
+  if ((G(L)->dispatchmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
+    HotCount old_count = hotcount_get(L2GG(L), PC);
+    HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_LOOP);
+    if (new_count > old_count) {
+      /* Hot loop counter underflow. */
+      jit_State *J = L2J(L);
+      vm_savepc(L, PC);
+      J->L = L;
+      lj_trace_hot(J, PC);
+    }
+  }
+}
+
+/* Hot call detection: invoke trace recorder if function is hot. */
+static inline void vm_hotcall(lua_State *L) {
+  /* Hotcount if JIT is on, but not while recording. */
+  if ((G(L)->dispatchmode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
+    HotCount old_count = hotcount_get(L2GG(L), PC);
+    HotCount new_count = hotcount_set(L2GG(L), PC, old_count - HOTCOUNT_CALL);
+    if (new_count > old_count) {
+      /* Hot call counter underflow. */
+      vm_savepc(L, PC);
+      TOP = BASE + NARGS;
+      uintptr_t hotcall = (uintptr_t)PC | 1; /* LSB set: marker for hot call. */
+      lj_dispatch_call(L, (BCIns *)hotcall);
+      vm_savepc(L, 0); /* Invalidate for subsequent line hook. */
+    }
+  }
+}
+
+/* Execute a JIT compiled machine code trace.
+ *
+ * Sets up the global context state needed for trace execution, and
+ * synchronizes trace machine code and bytecode interpreter VM via
+ * TraceCallState.
+ *
+ * Can either rethrow an error returned from the trace, or continue
+ * interpreter execution with new PC/BASE.
+ */
+static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
+  jit_State *J = L2J(L);
+  GCtrace *trace = gcrefp(J->trace[traceno], GCtrace);
+  TraceCallState tcs = {};
+  int status;
+  GCfunc *fn;
+  uint64_t link;
+  BCIns *retpc;
+  int delta;
+  /* Bail (nop) if currently recording a trace. */
+  if (G(L)->dispatchmode & DISPMODE_REC) return;
+  /* Setup trace context. */
+  J2G(J)->jit_base = BASE;
+  J2G(J)->tmpbuf.L = L;
+  J2GG(J)->tcs = &tcs;
+  tcs.state.gpr[GPR_DISPATCH] = (intptr_t)J2GG(J)->dispatch;
+  tcs.state.gpr[GPR_BASE] = (intptr_t)BASE;
+  /* Call JIT compiled trace with call state. */
+  lj_vm_trace_call(&tcs, trace->mcode);
+  /* Handle trace exit. */
+  if (tcs.handler != TRACE_EXIT_INTERP_NOTRACK) {
+    /* Record which trace exited to the interpreter. */
+    J2G(J)->lasttrace = STATE;
+  }
+  /* Restore interpreter state. */
+  if (tcs.handler == TRACE_EXIT) {
+    J->L = L;
+    J->parent = STATE;
+    J->exitno = tcs.exitno;
+    STATE = ~LJ_VMST_EXIT;
+    BASE = J2G(J)->jit_base;
+    J2G(J)->jit_base = NULL;
+    status = lj_trace_exit(J, &tcs.state);
+    PC = cframe_pc(cframe_raw(L->cframe)); // set by lj_trace_exit
+  } else {
+    BASE = (TValue*)tcs.state.gpr[GPR_BASE];
+    status = (int)tcs.state.gpr[GPR_RET];
+    PC = (BCIns*)tcs.state.gpr[GPR_PC];
+  }
+  /* Restore NARGS, MULTRES. */
+  if (status > 0) {
+    /* Status is MULTRES+1. */
+    NARGS = MULTRES = status-1;
+  } else if (status < 0) {
+    /* Error returned from trace, rethrow from the right C frame. */
+    lj_err_throw(L, -status);
+  }
+  /* Restore KBASE. */
+  fn = funcV(BASE-2);
+  if (isluafunc(fn)) {
+    KBASE = mref(funcproto(fn)->k, void);
+  } else {
+    link = BASE[-1].u64;
+    if ((link & FRAME_TYPE) == FRAME_LUA) {
+      /* Set KBASE for Lua function below. */
+      retpc = (BCIns *)link;
+      delta = bc_a(*(retpc-1));
+      fn = funcV(BASE-delta-2-2);
+      KBASE = mref(funcproto(fn)->k, void);
+    } else {
+      /* Trace stitching continuation. */
+      assert((link & FRAME_TYPE) == FRAME_CONT);
+    }
+  }
+  /* Return to interpreter. */
+  J2G(J)->jit_base = NULL;
+  STATE = ~LJ_VMST_INTERP;
+}
+
+/* Trace stitching continuation. */
+void lj_cont_stitch(void) {
+  lua_State *L = CONT_L;
+  jit_State *J = L2J(L);
+  BCIns curins = *(PC-1);
+  GCtrace *prev = (GCtrace *)gcV(CONT_BASE-5);
+  TValue *callbase = BASE+A;
+  /* Copy results. */
+  copyTVs(L, callbase, CONT_BASE+CONT_OFS, MULTRES, B-1);
+  /* Have a trace, and it is not blacklisted? */
+  if (prev && prev->traceno != prev->link) {
+    if (prev->link) {
+      /* Jump to stitched trace. */
+      vm_exec_trace(L, prev->link);
+    } else {
+      /* Stitch a new trace to the previous trace. */
+      J->L = L;
+      J->exitno = prev->traceno;
+      /* NB: cframe->multres is used by lj_dispatch_stitch. */
+      ((CFrame *) cframe_raw(L->cframe))->multres = MULTRES + 1;
+      lj_dispatch_stitch(J, PC);
+    }
+  }
+}
+
+
 /* -- Various auxiliary VM functions -------------------------------------- */
 
 /* Save a pc to the active CFrame.
@@ -2025,6 +2225,7 @@ int luacall(lua_State *L, int p, TValue *newbase, int nres, ptrdiff_t ef)
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
+  L2J(L)->L = L;
   /* Setup VM state for callee. */
   STATE = ~LJ_VMST_INTERP;
   vm_call(L, newbase, TOP - newbase, (p ? FRAME_CP : FRAME_C));
@@ -2068,6 +2269,9 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction f, void *ud, lua_CPFunction cp) {
   L->cframe = &cf;
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
+  L2J(L)->L = L;
+  /* Save PC to new CFrame (needed for error handling in f). */
+  vm_savepc(L, PC);
   /* Setup "catch" jump buffer for a protected call. */
   res = _setjmp(cf.jb);
   if (res < 0) {
@@ -2105,6 +2309,7 @@ int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef) {
   setmref(L->cframe, (intptr_t)&cf + CFRAME_RESUME);
   /* Reference the now-current lua_State. */
   setgcref(G(L)->cur_L, obj2gco(L));
+  L2J(L)->L = L;
   /* Setup VM state for callee. */
   STATE = ~LJ_VMST_INTERP;
   if (L->status == LUA_OK) {
@@ -2146,7 +2351,6 @@ void lj_vm_unwind_c_eh(void)                   { assert(0 && "NYI"); }
 void lj_vm_unwind_ff_eh(void)                  { assert(0 && "NYI"); }
 void lj_vm_unwind_rethrow(void)                { assert(0 && "NYI"); }
 void lj_vm_ffi_callback()                      { assert(0 && "NYI"); }
-void lj_vm_ffi_call(CCallState *cc); /* See lj_vm_ffi_call_*.asm */
 
 /* Miscellaneous functions. */
 int lj_vm_cpuid(uint32_t f, uint32_t res[4])       {
@@ -2160,11 +2364,6 @@ void lj_vm_record(void)   { assert(0 && "NYI"); }
 void lj_vm_inshook(void)  { assert(0 && "NYI"); }
 void lj_vm_rethook(void)  { assert(0 && "NYI"); }
 void lj_vm_callhook(void) { assert(0 && "NYI"); }
-
-/* Trace exit handling. */
-void lj_vm_exit_handler(void) { assert(0 && "NYI"); }
-void lj_vm_exit_interp(void)  { assert(0 && "NYI"); }
-void lj_vm_exit_interp_notrack(void) { assert(0 && "NYI"); }
 
 /* Internal math helper functions. */
 double lj_vm_floor(double a) { return floor(a); }
@@ -2213,13 +2412,12 @@ void lj_cont_condt(void) {
 }
 
 void lj_cont_condf(void)  {
-/* Branch if result is false. */
+  /* Branch if result is false. */
   int flag = !(MULTRES && tvistruecond(CONT_BASE+CONT_OFS));
   BCIns curins = *PC++;
   if (flag) branchPC(D);
 }
 
 void lj_cont_hook(void)	  { assert(0 && "NYI"); }
-void lj_cont_stitch(void) { assert(0 && "NYI"); }
 
 char lj_vm_asm_begin[0];
