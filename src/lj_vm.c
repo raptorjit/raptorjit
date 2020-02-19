@@ -58,7 +58,7 @@ static inline void vm_callt(lua_State *L, int offset, int _nargs);
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 static int fff_fallback(lua_State *L);
-static inline void vm_dispatch(lua_State *L, BCIns curins);
+static inline void vm_dispatch(lua_State *L);
 static inline void vm_hotloop(lua_State *L);
 static inline void vm_hotcall(lua_State *L);
 static inline void vm_exec_trace(lua_State *L, BCReg traceno);
@@ -259,8 +259,8 @@ void execute(lua_State *L) {
   BCIns curins;
  execute:
   insctr++;
+  vm_dispatch(L); /* Load curins after! (Can patch next bytecode at *PC.) */
   curins = *PC++;
-  vm_dispatch(L, curins);
   switch (OP) {
   case BC_ISLT:
     /* ISLT: Take following JMP instruction if A < D. */
@@ -2037,17 +2037,17 @@ int fff_fallback(lua_State *L) {
 /* -- Hook and recording dispatch ----------------------------------------- */
 
 /* Invoke hooks for or record the next instruction to be executed. */
-static inline void vm_dispatch(lua_State *L, BCIns curins) {
+static inline void vm_dispatch(lua_State *L) {
   global_State *g = G(L);
   uint8_t mode = g->dispatchmode;
   if (hook_active(g) & HOOK_EVENTMASK)
     assert(0 && "NYI: active hooks");
-  if (mode & DISPMODE_REC && OP < GG_LEN_SDISP) {
+  if (mode & DISPMODE_REC && bc_op(*PC) < GG_LEN_SDISP) {
     /* NB: cframe->multres is used by lj_dispatch_ins. */
     ((CFrame *) cframe_raw(L->cframe))->multres = MULTRES + 1;
-    lj_dispatch_ins(L, PC);
+    lj_dispatch_ins(L, PC+1);
   } else if (mode & DISPMODE_CALL)
-    lj_dispatch_call(L, PC);
+    lj_dispatch_call(L, PC+1);
 }
 
 
@@ -2104,8 +2104,6 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   uint64_t link;
   BCIns *retpc;
   int delta;
-  /* Bail (nop) if currently recording a trace. */
-  if (G(L)->dispatchmode & DISPMODE_REC) return;
   /* Setup trace context. */
   J2G(J)->jit_base = BASE;
   J2G(J)->tmpbuf.L = L;
