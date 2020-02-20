@@ -27,8 +27,9 @@
 #include "lj_err.h"
 #include "lj_vm_tcs.h"
 
+#ifdef LUA_VM_DEBUG
 /* Count of executed instructions for debugger prosperity. */
-static uint64_t insctr;
+static volatile uint64_t insctr;
 
 /* Offset for when to start tracing (as in "logging", this has nothing to do
  * with the tracing JIT whatsoever) bytecode execution when debugging the
@@ -38,15 +39,21 @@ static uint64_t insctr;
  * this variable accordingly to log the executed bytecodes from that point
  * onward.
  */
-static uint64_t insctr_tracefrom = UINT64_MAX;
+static volatile uint64_t insctr_tracefrom = UINT64_MAX;
 
 #define TRACE(name)                                                     \
   if (insctr >= insctr_tracefrom)                                       \
-    printf("%-6lu %-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%ld\n",   \
-           insctr, name, A, B, C, D, TOP-BASE)
+    printf("%-6lu %-6s A=%-3d B=%-3d C=%-3d D=%-5d stackdepth=%-3ld%s\n", \
+           insctr, name, A, B, C, D, TOP-BASE,                          \
+           (G(L)->dispatchmode & DISPMODE_REC) ? " [rec]" : "")
 #define TRACEFF(name)                                           \
   if (insctr >= insctr_tracefrom)                               \
     printf("%-6lu ASMFF  OP=%-3x %-10s\n", insctr, OP, name)
+#endif
+#ifndef LUA_VM_DEBUG
+#define TRACE(name) ((void)0)
+#define TRACEFF(name) ((void)0)
+#endif
 
 #define neg(n) (-1 - (n))
 #define max(a,b) ((a)>(b) ? (a) : (b))
@@ -58,7 +65,7 @@ static inline void vm_callt(lua_State *L, int offset, int _nargs);
 static int vm_return(lua_State *L, uint64_t link, int resultofs, int nresults);
 static inline void vm_call_cont(lua_State *L, TValue *newbase, int _nargs);
 static int fff_fallback(lua_State *L);
-static inline void vm_dispatch(lua_State *L, BCIns curins);
+static inline void vm_dispatch(lua_State *L);
 static inline void vm_hotloop(lua_State *L);
 static inline void vm_hotcall(lua_State *L);
 static inline void vm_exec_trace(lua_State *L, BCReg traceno);
@@ -69,8 +76,8 @@ static inline int32_t tobit(TValue *num);
 void lj_ffh_coroutine_wrap_err(lua_State *L, lua_State *co);
 
 /* Simple debug utility. */
-#if 0
-static void printstack(lua_State *L)
+#ifdef LUA_VM_DEBUG
+void printstack(lua_State *L)
 {
   int i;
   for (i = -2; i < L->top - L->base; i++) {
@@ -79,7 +86,7 @@ static void printstack(lua_State *L)
     fflush(stdout);
   }
 }
-static void printupvalues(GCfuncL *parent)
+void printupvalues(GCfuncL *parent)
 {
   int i;
   for (i = 0; i < parent->nupvalues; i++) {
@@ -258,9 +265,11 @@ static inline void branchPC(int offset)
 void execute(lua_State *L) {
   BCIns curins;
  execute:
+  #ifdef LUA_VM_DEBUG
   insctr++;
+  #endif
+  vm_dispatch(L); /* Load curins after! (Can patch next bytecode at *PC.) */
   curins = *PC++;
-  vm_dispatch(L, curins);
   switch (OP) {
   case BC_ISLT:
     /* ISLT: Take following JMP instruction if A < D. */
@@ -2037,17 +2046,17 @@ int fff_fallback(lua_State *L) {
 /* -- Hook and recording dispatch ----------------------------------------- */
 
 /* Invoke hooks for or record the next instruction to be executed. */
-static inline void vm_dispatch(lua_State *L, BCIns curins) {
+static inline void vm_dispatch(lua_State *L) {
   global_State *g = G(L);
   uint8_t mode = g->dispatchmode;
   if (hook_active(g) & HOOK_EVENTMASK)
     assert(0 && "NYI: active hooks");
-  if (mode & DISPMODE_REC && OP < GG_LEN_SDISP) {
+  if (mode & DISPMODE_REC && bc_op(*PC) < GG_LEN_SDISP) {
     /* NB: cframe->multres is used by lj_dispatch_ins. */
     ((CFrame *) cframe_raw(L->cframe))->multres = MULTRES + 1;
-    lj_dispatch_ins(L, PC);
+    lj_dispatch_ins(L, PC+1);
   } else if (mode & DISPMODE_CALL)
-    lj_dispatch_call(L, PC);
+    lj_dispatch_call(L, PC+1);
 }
 
 
@@ -2104,8 +2113,6 @@ static inline void vm_exec_trace(lua_State *L, BCReg traceno) {
   uint64_t link;
   BCIns *retpc;
   int delta;
-  /* Bail (nop) if currently recording a trace. */
-  if (G(L)->dispatchmode & DISPMODE_REC) return;
   /* Setup trace context. */
   J2G(J)->jit_base = BASE;
   J2G(J)->tmpbuf.L = L;
