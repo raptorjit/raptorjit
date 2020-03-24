@@ -69,7 +69,6 @@ static inline void vm_dispatch(lua_State *L);
 static inline void vm_hotloop(lua_State *L);
 static inline void vm_hotcall(lua_State *L);
 static inline void vm_exec_trace(lua_State *L, BCReg traceno);
-int lj_vm_resume(lua_State *L, TValue *newbase, int nres1, ptrdiff_t ef);
 static inline void vm_savepc(lua_State *L, const BCIns *pc);
 static inline int32_t tobit(TValue *num);
 /* From lib_base.c: */
@@ -120,8 +119,8 @@ void printupvalues(GCfuncL *parent)
  */
 
 /* Backing variables for certain registers. */
-static int multres;
-static int nargs;
+static unsigned int multres;
+static unsigned int nargs;
 static void *kbase;
 static const BCIns *pc;
 static lua_State *cont_L;
@@ -740,7 +739,7 @@ void execute(lua_State *L) {
   case BC_UCLO:
     /* UCLO: Close upvalues for slots ≥ rbase and jump to target D. */
     TRACE("UCLO");
-    if (L->openupval > 0)
+    if (L->openupval > (GCRef)0)
       lj_func_closeuv(L, BASE+A);
     branchPC(D);
     break;
@@ -904,7 +903,7 @@ void execute(lua_State *L) {
     TRACE("TSETM");
     vm_savepc(L, PC);
     {
-      int i = 0, ix = ktv(D)->u32.lo;
+      unsigned int i = 0, ix = ktv(D)->u32.lo;
       TValue *o = BASE+A-1;
       GCtab *tab = tabV(o);
       if (tab->asize < ix+MULTRES)
@@ -976,7 +975,7 @@ void execute(lua_State *L) {
       TValue *state = BASE + A-1;
       TValue *key = BASE + A+0;
       TValue *val = BASE + A+1;
-      int i = state->i;
+      unsigned int i = state->i;
       /* Advance to ITERL instruction. */
       curins = *PC++;
       /* Traverse array part. */
@@ -1736,11 +1735,11 @@ void execute(lua_State *L) {
         if (start < 0)
           start = max(start + (int)str->len+1, 1);
         else
-          start = max(min(start, str->len+1), 1);
+          start = max(min(start, (int)str->len+1), 1);
         if (end < 0)
           end = max(end + (int)str->len+1, 0);
         else
-          end = min(end, str->len);
+          end = min(end, (int)str->len);
         nresults = max(1+end-start, 0);
         assert(BASE+nresults <= mref(L->maxstack, TValue));
         for (i=0; i+start <= end; i++)
@@ -1765,11 +1764,11 @@ void execute(lua_State *L) {
         if (start < 0)
           start = max(start + (int)str->len+1, 1);
         else
-          start = max(min(start, str->len+1), 1);
+          start = max(min(start, (int)str->len+1), 1);
         if (end < 0)
           end = max(end + (int)str->len+1, 0);
         else
-          end = min(end, str->len);
+          end = min(end, (int)str->len);
         str = lj_str_new(L, strdata(str)+start-1, max(1+end-start, 0));
         setgcVraw(BASE-2, (GCobj *)str, LJ_TSTR);
         if (vm_return(L, BASE[-1].u64, -2, 1)) return;
