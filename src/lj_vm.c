@@ -2178,7 +2178,7 @@ void lj_cont_stitch(void) {
   GCtrace *prev = (GCtrace *)gcV(CONT_BASE-5);
   TValue *callbase = BASE+A;
   /* Copy results. */
-  copyTVs(L, callbase, CONT_BASE+CONT_OFS, MULTRES, B-1);
+  copyTVs(L, callbase, CONT_BASE+CONT_OFS, B-1, MULTRES);
   /* Have a trace, and it is not blacklisted? */
   if (prev && prev->traceno != prev->link) {
     if (prev->link) {
