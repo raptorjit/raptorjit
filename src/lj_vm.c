@@ -94,6 +94,13 @@ void printupvalues(GCfuncL *parent)
     fflush(stdout);
   }
 }
+void printsource(lua_State *L)
+{
+  lua_Debug ar;
+  lua_getstack(L, 0, &ar);
+  lua_getinfo(L, "nSl", &ar);
+  printf("%s %s:%d\n", ar.what, ar.source, ar.currentline);
+}
 #endif
 
 /*
