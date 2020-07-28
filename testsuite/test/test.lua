@@ -31,7 +31,11 @@ local function default_tags()
 
   -- LuaJIT-specific
   if jit then
-    tags.luajit = tonumber(jit.version:match"%d+%.%d+")
+    if jit.version:match"RaptorJIT" then
+       tags.luajit = 2.1
+    else
+       tags.luajit = tonumber(jit.version:match"%d+%.%d+")
+    end
     tags[jit.arch:lower()] = true
     if jit.os ~= "Other" then
       tags[jit.os:lower()] = true

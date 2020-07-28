@@ -28,15 +28,15 @@ NODOTABIVER= 51
 # to slow down the C part by not omitting it. Debugging, tracebacks and
 # unwinding are not affected -- the assembler part has frame unwind
 # information and GCC emits it where needed (x64) or with -g (see CCDEBUG).
-CCOPT= -O2 -fomit-frame-pointer
+CCOPT= -O0 -fomit-frame-pointer
 # Use this if you want to generate a smaller binary (but it's slower):
 #CCOPT= -Os -fomit-frame-pointer
 # Note: it's no longer recommended to use -O3 with GCC 4.x.
 # The I-Cache bloat usually outweighs the benefits from aggressive inlining.
 #
-CCDEBUG=
+#CCDEBUG=
 # Uncomment the next line to generate debug information:
-#CCDEBUG= -g
+CCDEBUG= -gdwarf-2 -g3
 #
 CCWARN= -Wall
 # Uncomment the next line to enable more warnings:
@@ -93,11 +93,11 @@ XCFLAGS=
 #
 # Turn on assertions for the Lua/C API to debug problems with lua_* calls.
 # This is rather slow -- use only while developing C libraries/embeddings.
-#XCFLAGS+= -DLUA_USE_APICHECK
+XCFLAGS+= -DLUA_USE_APICHECK
 #
 # Turn on assertions for the whole LuaJIT VM. This significantly slows down
 # everything. Use only if you suspect a problem with LuaJIT itself.
-#XCFLAGS+= -DLUA_USE_ASSERT
+XCFLAGS+= -DLUA_USE_ASSERT
 #
 ##############################################################################
 # You probably don't need to change anything below this line!
@@ -192,22 +192,9 @@ Host_XCFLAGS+= -DLUAJIT_OS=LUAJIT_OS_LINUX
 # Files and pathnames.
 ##############################################################################
 
-DASM_DIR= ../dynasm
-DASM= $(HOST_LUA) $(DASM_DIR)/dynasm.lua
-DASM_ARCH= x64
-DASM_DASC= vm_$(DASM_ARCH).dasc
-
-BUILDVM_O= host/buildvm.o host/buildvm_asm.o host/buildvm_peobj.o \
-	   host/buildvm_lib.o host/buildvm_fold.o
-BUILDVM_T= host/buildvm
-BUILDVM_X= $(BUILDVM_T)
-
-HOST_O= $(BUILDVM_O)
-HOST_T= $(BUILDVM_T)
-
-LJVM_S= lj_vm.S
-LJVM_O= lj_vm.o
-LJVM_BOUT= $(LJVM_S)
+LJVM_C= lj_vm.c
+LJVM_O= lj_vm.o lj_vm_ffi_call_x64.o lj_vm_trace_call_x64.o
+LJVM_BOUT= $(LJVM_C)
 LJVM_MODE= elfasm
 
 LJLIB_O= lib_base.o lib_math.o lib_bit.o lib_string.o lib_table.o \
@@ -239,9 +226,8 @@ LUAJIT_SO= libraptorjit.so
 LUAJIT_T= raptorjit
 
 ALL_T= $(LUAJIT_T) $(LUAJIT_A) $(LUAJIT_SO) $(HOST_T)
-ALL_HDRGEN= lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h \
-	    host/buildvm_arch.h
-ALL_GEN= $(LJVM_S) $(ALL_HDRGEN)
+ALL_HDRGEN= lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h
+ALL_GEN= $(ALL_HDRGEN)
 WIN_RM= *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
 ALL_RM= $(ALL_T) *.o host/*.o $(WIN_RM)
 
@@ -255,8 +241,8 @@ TARGET_DEP= $(LUAJIT_SO)
 
 Q= @
 E= @echo
-#Q=
-#E= @:
+Q=
+E= @:
 
 ##############################################################################
 # Make targets.
@@ -316,8 +302,6 @@ host/buildvm_arch.h: $(DASM_DASC) $(DASM_DEP) $(DASM_DIR)/*.lua
 	$(E) "DYNASM    $@"
 	$(Q)$(DASM) -o $@ $(DASM_DASC)
 
-host/buildvm.o: $(DASM_DIR)/dasm_*.h
-
 $(BUILDVM_T): $(BUILDVM_O)
 	$(E) "HOSTLINK  $@"
 	$(Q)$(HOST_CC) $(HOST_ALDFLAGS) -o $@ $(BUILDVM_O) $(HOST_ALIBS)
@@ -355,10 +339,10 @@ lj_folddef.h: $(BUILDVM_T) lj_opt_fold.c
 	$(Q)$(TARGET_DYNCC) $(TARGET_ACFLAGS) -c -o $(@:.o=_dyn.o) $<
 	$(Q)$(TARGET_CC) $(TARGET_ACFLAGS) -c -o $@ $<
 
-%.o: %.S
-	$(E) "ASM       $@"
-	$(Q)$(TARGET_DYNCC) $(TARGET_ASFLAGS) -c -o $(@:.o=_dyn.o) $<
-	$(Q)$(TARGET_CC) $(TARGET_ASFLAGS) -c -o $@ $<
+%.o: %.asm
+	$(E) "NASM       $@"
+	$(Q)nasm -f elf64 -F dwarf -o $@ $<
+	$(Q)ln -sf $@ $(@:.o=_dyn.o)
 
 $(LUAJIT_O):
 	$(E) "CC        $@"

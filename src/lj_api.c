@@ -9,6 +9,8 @@
 #define lj_api_c
 #define LUA_CORE
 
+#include <stdio.h>
+
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_err.h"
@@ -132,7 +134,7 @@ LUA_API void lua_settop(lua_State *L, int idx)
     api_check(L, idx <= tvref(L->maxstack) - L->base);
     if (L->base + idx > L->top) {
       if (L->base + idx >= tvref(L->maxstack))
-	lj_state_growstack(L, (MSize)idx - (MSize)(L->top - L->base));
+	lj_state_checkstack(L, (MSize)idx - (MSize)(L->top - L->base));
       do { setnilV(L->top++); } while (L->top < L->base + idx);
     } else {
       L->top = L->base + idx;
@@ -1084,7 +1086,7 @@ static TValue *cpcall(lua_State *L, lua_CFunction func, void *ud)
   setfuncV(L, top++, fn);
   if (LJ_FR2) setnilV(top++);
   setlightudV(top++, checklightudptr(L, ud));
-  cframe_nres(L->cframe) = 1+0;  /* Zero results. */
+  L->cframe->nresults = 0;
   L->top = top;
   return top-1;  /* Now call the newly allocated C function. */
 }

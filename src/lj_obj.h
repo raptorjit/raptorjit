@@ -12,6 +12,7 @@
 #include "lua.h"
 #include "lj_def.h"
 #include "lj_arch.h"
+#include <setjmp.h>
 
 /* -- Memory references (32 bit address space) ---------------------------- */
 
@@ -155,6 +156,7 @@ typedef LJ_ALIGN(8) union TValue {
     , uint32_t hi;	/* Upper 32 bits of number. */
     )
   } u32;
+  //uint8_t pad[12];
 } TValue;
 
 typedef const TValue cTValue;
@@ -284,6 +286,7 @@ typedef struct GCproto {
   MSize sizebc;		/* Number of bytecode instructions. */
   uint32_t unused_gc64;
   GCRef gclist;
+
   MRef k;		/* Split constant array (points to the middle). */
   MRef uv;		/* Upvalue list. local slot|0x8000 or parent uv idx. */
   MSize sizekgc;	/* Number of collectable constants. */
@@ -319,7 +322,8 @@ typedef struct GCproto {
 #define PROTO_UV_LOCAL		0x8000	/* Upvalue for local slot. */
 #define PROTO_UV_IMMUTABLE	0x4000	/* Immutable upvalue. */
 
-#define proto_kgc(pt, idx) \
+
+#define proto_kgc(pt, idx)                                              \
   check_exp((uintptr_t)(intptr_t)(idx) >= (uintptr_t)-(intptr_t)(pt)->sizekgc, \
 	    gcref(mref((pt)->k, GCRef)[(idx)]))
 #define proto_knumtv(pt, idx) \
@@ -538,6 +542,25 @@ typedef struct global_State {
   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
 } global_State;
 
+/* CFrames are chained structures that describe the C stack from on
+ * which they are allocated. Their purpose is error handling. If a Lua
+ * exception occurs then the CFrames chain can be traversed to
+ * transfer control to the C stack frame that is responsible for
+ * handling the error.
+ *
+ * Exception handling is managed on the C stack instead of the Lua
+ * stack so that it is possible to throw and catch Lua exceptions from
+ * both C and Lua code in an interoperable way.
+ */
+typedef struct CFrame {
+  struct CFrame *previous;
+  lua_State *L;
+  int nresults, multres, errfunc;
+  volatile int status;
+  jmp_buf jb;
+  MRef *pc;
+} CFrame;
+
 #define mainthread(g)	(&gcref(g->mainthref)->th)
 #define niltv(L) \
   check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
@@ -570,7 +593,7 @@ struct lua_State {
   MRef stack;		/* Stack base. */
   GCRef openupval;	/* List of open upvalues in the stack. */
   GCRef env;		/* Thread environment (table of globals). */
-  void *cframe;		/* End of C stack frame chain. */
+  CFrame *cframe;	/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
 };
 

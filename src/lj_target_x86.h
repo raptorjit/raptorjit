@@ -95,7 +95,7 @@ enum {
 
 /* -- Exit state ---------------------------------------------------------- */
 
-/* This definition must match with the *.dasc file(s). */
+/* This definition must match with lj_vm_trace_call_*.asm. */
 typedef struct {
   lua_Number fpr[RID_NUM_FPR];	/* Floating-point registers. */
   intptr_t gpr[RID_NUM_GPR];	/* General-purpose registers. */

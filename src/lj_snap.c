@@ -744,7 +744,7 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
   /* Make sure the stack is big enough for the slots from the snapshot. */
   if (LJ_UNLIKELY(L->base + snap->topslot >= tvref(L->maxstack))) {
     L->top = curr_topL(L);
-    lj_state_growstack(L, snap->topslot - curr_proto(L)->framesize);
+    lj_state_checkstack(L, snap->topslot - curr_proto(L)->framesize);
   }
 
   /* Fill stack slots with data from the registers and spill slots. */

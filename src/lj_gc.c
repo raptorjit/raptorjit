@@ -291,7 +291,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
       setnilV(o);
   }
   gc_markobj(g, tabref(th->env));
-  lj_state_shrinkstack(th, gc_traverse_frames(g, th));
+  gc_traverse_frames(g, th);
 }
 
 /* Propagate one gray object. Traverse it and turn it black. */

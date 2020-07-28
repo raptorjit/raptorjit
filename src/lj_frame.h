@@ -3,6 +3,8 @@
 ** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
 */
 
+#include <stddef.h>
+
 #ifndef _LJ_FRAME_H
 #define _LJ_FRAME_H
 
@@ -78,13 +80,13 @@ enum { LJ_CONT_TAILCALL, LJ_CONT_FFI_CALLBACK };  /* Special continuations. */
 /* Macros to access and modify the C stack frame chain. */
 
 /* These definitions must match with the arch-specific *.dasc files. */
-#define CFRAME_OFS_PREV		(4*8)
-#define CFRAME_OFS_PC		(3*8)
-#define CFRAME_OFS_L		(2*8)
-#define CFRAME_OFS_ERRF		(3*4)
-#define CFRAME_OFS_NRES		(2*4)
-#define CFRAME_OFS_MULTRES	(0*4)
-#define CFRAME_SIZE		(12*8)
+#define CFRAME_OFS_PREV		(offsetof(CFrame, previous))
+#define CFRAME_OFS_PC		(offsetof(CFrame, pc))
+#define CFRAME_OFS_L		(offsetof(CFrame, L))
+#define CFRAME_OFS_ERRF		(offsetof(CFrame, errfunc))
+#define CFRAME_OFS_NRES		(offsetof(CFrame, nresults))
+#define CFRAME_OFS_MULTRES	(offsetof(CFrame, multres))
+#define CFRAME_SIZE		(sizeof CFrame)
 #define CFRAME_SIZE_JIT		(CFRAME_SIZE + 16)
 #define CFRAME_SHIFT_MULTRES	0
 

@@ -2343,7 +2343,7 @@ void lj_record_ins(jit_State *J)
   if (bcmode_a(op) == BCMdst && rc) {
     J->base[ra] = rc;
     if (ra >= J->maxslot) {
-      if (ra > J->maxslot) J->base[ra-1] = 0;
+      while (ra > J->maxslot) J->base[J->maxslot++] = 0;
       J->maxslot = ra+1;
     }
   }

@@ -7,8 +7,9 @@
 #define _LJ_VM_H
 
 #include "lj_obj.h"
+#include <setjmp.h>
 
-/* Entry points for ASM parts of VM. */
+/* Entry points for VM. */
 LJ_ASMF void lj_vm_call(lua_State *L, TValue *base, int nres1);
 LJ_ASMF int lj_vm_pcall(lua_State *L, TValue *base, int nres1, ptrdiff_t ef);
 typedef TValue *(*lua_CPFunction)(lua_State *L, lua_CFunction func, void *ud);
@@ -35,7 +36,8 @@ LJ_ASMF void lj_vm_inshook(void);
 LJ_ASMF void lj_vm_rethook(void);
 LJ_ASMF void lj_vm_callhook(void);
 
-/* Trace exit handling. */
+/* Trace entry and exit handling. See lj_vm_trace_call_*.asm */
+LJ_ASMF void lj_vm_trace_call(void *tcs, void *mcode);
 LJ_ASMF void lj_vm_exit_handler(void);
 LJ_ASMF void lj_vm_exit_interp(void);
 LJ_ASMF void lj_vm_exit_interp_notrack(void);
