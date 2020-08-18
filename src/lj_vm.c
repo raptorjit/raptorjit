@@ -2044,16 +2044,19 @@ int fff_fallback(lua_State *L) {
   vm_savepc(L, (BCIns*)link);
   int res = (*f)(L);
   switch (res) {
-  case -1: /* FFH_TAILCALL */
+  case -1: { /* FFH_TAILCALL */
+    TValue *callbase = BASE;
+    PC = (BCIns*)link; /* Reset PC for debug_framepc(). */
     if ((link & FRAME_TYPE) == FRAME_LUA) {
-      int delta = bc_a(*(BCIns*)link);
+      int delta = bc_a(*(PC-1));
       BASE -= delta+2;
-      PC = (BCIns*)BASE[-1].u64; /* Reset PC for debug_framepc(). */
-      vm_callt(L, delta, NARGS);
     } else {
-      assert(0 && "NYI: fff_fallback tail call in non-Lua frame.");
+      int delta = link >> 3;
+      BASE -= delta;
     }
+    vm_call(L, callbase, NARGS, FRAME_LUA);
     return 0;
+  }
   case  0: /* FFH_RETRY */
     PC--; /* Retry the operation. */
     return 0;
