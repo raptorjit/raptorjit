@@ -45,3 +45,26 @@ do --- int array allocations
     end
   end
 end
+
+do --- ISEQS
+   local s = ffi.new("char[123]")
+   assert(s ~= "foo", "s ~= foo")
+   local ms = ffi.metatype(
+      "struct { char s[123]; }",
+      {__eq = function (x, y) return ffi.string(x.s) == y end}
+   )
+   local s1 = ms{s="foo"}
+   assert(s1 == "foo", "s1 == foo (__eq)")
+   assert(s1 ~= "bar", "s1 ~= bar (__eq)")
+end
+
+do --- ISEQP
+   local s = ffi.typeof("struct { bool b; }")
+   local s1 = s{b=true}
+   assert(s1 ~= true,  "s1 ~= true")
+   local ms = ffi.metatype(s, {__eq = function (x, y) return x.b == y end})
+   local s2 = s{b=true}
+   assert(s1 == true,  "s2 == true")
+   assert(s1 ~= false,  "s2 ~= false")
+   assert(s1 ~= nil,  "s2 ~= nil")
+end

@@ -372,8 +372,15 @@ void execute(lua_State *L) {
       int flag = (OP == BC_ISNES); // Invert flag on ISNES.
       if (tvisstr(BASE+A))
         flag ^= (strV(BASE+A) == kgcref(D, GCstr));
-      else if (tviscdata(BASE+A))
-        assert(0 && "NYI: ISEQS/ISNES on cdata.");
+      else if (tviscdata(BASE+A)) {
+        vm_savepc(L, (BCIns*)((intptr_t)PC-4));
+        TValue *res = lj_meta_equal_cd(L, curins);
+        if ((intptr_t)res > 1) {
+          vm_call_cont(L, res, 2);
+          break; /* Do not clobber PC! */
+        } else
+          flag = (intptr_t)res;
+      }
       curins = *PC++;
       if (flag) branchPC(D);
     }
@@ -414,8 +421,15 @@ void execute(lua_State *L) {
       if (itype(BASE+A) == ~D)
         /* If the types match than A is nil/false/true and equal to pri D. */
         flag ^= 1;
-      else if (tviscdata(BASE+A))
-        assert(0 && "NYI: ISEQP/ISNEP on cdata.");
+      else if (tviscdata(BASE+A)) {
+        vm_savepc(L, (BCIns*)((intptr_t)PC-4));
+        TValue *res = lj_meta_equal_cd(L, curins);
+        if ((intptr_t)res > 1) {
+          vm_call_cont(L, res, 2);
+          break; /* Do not clobber PC! */
+        } else
+          flag = (intptr_t)res;
+      }
       curins = *PC++;
       if (flag) branchPC(D);
     }
