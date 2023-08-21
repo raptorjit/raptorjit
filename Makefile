@@ -72,7 +72,8 @@ INSTALL_F= install -m 0644
 UNINSTALL= $(RM)
 LDCONFIG= ldconfig -n 2>/dev/null
 SED_PC= sed -e "s|^prefix=.*|prefix=$(PREFIX)|" \
-            -e "s|^multilib=.*|multilib=$(MULTILIB)|"
+	    -e "s|^multilib=.*|multilib=$(MULTILIB)|" \
+	    -e "s|^relver=.*|relver=$(RELVER)|"
 ifneq ($(INSTALL_DEFINC),$(INSTALL_INC))
   SED_PC+= -e "s|^includedir=.*|includedir=$(INSTALL_INC)|"
 endif
