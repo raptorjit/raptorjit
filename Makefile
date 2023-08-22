@@ -128,8 +128,7 @@ install: $(INSTALL_DEP)
 	cd src && $(INSTALL_F) $(FILES_INC) $(INSTALL_INC)
 	cd src/jit && $(INSTALL_F) $(FILES_JITLIB) $(INSTALL_JITLIB)
 	$(SYMLINK) $(INSTALL_TNAME) $(INSTALL_TSYM)
-	@echo ""
-
+	@echo "==== Successfully installed LuaJIT $(VERSION) to $(PREFIX) ===="
 
 uninstall:
 	@echo "==== Uninstalling RaptorJIT $(VERSION) from $(PREFIX) ===="
