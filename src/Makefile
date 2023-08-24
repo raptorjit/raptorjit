@@ -275,6 +275,10 @@ reusevm:
 	cp -r * ../
 	@echo "Copied reference VM. Ready to build."
 
+update_reusevm:
+	cp lj_bcdef.h lj_ffdef.h lj_folddef.h lj_libdef.h lj_recdef.h lj_vm.S reusevm/
+	cp host/buildvm_arch.h reusevm/host/
+
 libbc:
 	./$(LUAJIT_T) host/genlibbc.lua -o host/buildvm_libbc.h $(LJLIB_C)
 	$(MAKE) all
