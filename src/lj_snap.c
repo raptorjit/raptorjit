@@ -766,7 +766,7 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 				  lj_tab_dup(J->L, ir_ktab(&T->ir[ir->op1]));
     settabV(J->L, o, t);
     irlast = &T->ir[T->snap[snapno].ref];
-    for (irs = ir+1; irs < irlast; irs++)
+    for (irs = ir+1; irs < irlast; irs++) {
       if (irs->r == RID_SINK && snap_sunk_store(T, ir, irs)) {
 	IRIns *irk = &T->ir[irs->op1];
 	TValue tmp, *val;
@@ -774,11 +774,19 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 		   irs->o == IR_FSTORE,
 		   "sunk store with bad op %d", irs->o);
 	if (irk->o == IR_FREF) {
-	  lj_assertJ(irk->op2 == IRFL_TAB_META,
-		     "sunk store with bad field %d", irk->op2);
-	  snap_restoreval(J, T, ex, snapno, rfilt, irs->op2, &tmp);
-	  /* NOBARRIER: The table is new (marked white). */
-	  setgcref(t->metatable, obj2gco(tabV(&tmp)));
+	  switch (irk->op2) {
+	  case IRFL_TAB_META:
+	    snap_restoreval(J, T, ex, snapno, rfilt, irs->op2, &tmp);
+	    /* NOBARRIER: The table is new (marked white). */
+	    setgcref(t->metatable, obj2gco(tabV(&tmp)));
+	    break;
+	  case IRFL_TAB_NOMM:
+	    /* Negative metamethod cache invalidated by lj_tab_set() below. */
+	    break;
+	  default:
+	    lj_assertJ(0, "sunk store with bad field %d", irk->op2);
+	    break;
+	  }
 	} else {
 	  irk = &T->ir[irk->op2];
 	  if (irk->o == IR_KSLOT) irk = &T->ir[irk->op1];
@@ -792,6 +800,7 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 	  }
 	}
       }
+    }
   }
 }
 
