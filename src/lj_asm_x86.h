@@ -2201,7 +2201,7 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
     if (irp->r == r) {
       return r;  /* Same BASE register already coalesced. */
     } else if (ra_hasreg(irp->r) && rset_test(as->freeset, irp->r)) {
-      emit_rr(as, XO_MOV, r, irp->r);  /* Move from coalesced parent reg. */
+      emit_rr(as, XO_MOV, r|REX_GC64, irp->r);  /* Move from coalesced parent reg. */
       return irp->r;
     } else {
       emit_getgl(as, r, jit_base);  /* Otherwise reload BASE. */
