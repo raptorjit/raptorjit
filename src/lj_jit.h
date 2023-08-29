@@ -56,7 +56,7 @@
 
 /* -- JIT engine parameters ----------------------------------------------- */
 
-/* See: http://blogs.msdn.com/oldnewthing/archive/2003/10/08/55239.aspx */
+/* See: https://devblogs.microsoft.com/oldnewthing/20031008-00/?p=42223 */
 #define JIT_P_sizemcode_DEFAULT		64
 
 /* Optimization parameters and their defaults. Length is a char in octal! */
