@@ -478,7 +478,8 @@ int main(int argc, char **argv)
     emit_asm_debug(ctx);
     break;
   case BUILD_peobj:
-    emit_peobj(ctx);
+    fprintf(stderr, "No support for peobj\n");
+    exit(1);
     break;
   case BUILD_raw:
     emit_raw(ctx);

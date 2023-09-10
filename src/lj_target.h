@@ -57,6 +57,8 @@ typedef uint32_t RegSP;
 */
 typedef uint32_t RegSet;
 #define RSET_BITS		5
+#define rset_picktop_(rs)	((Reg)lj_fls(rs))
+#define rset_pickbot_(rs)	((Reg)lj_ffs(rs))
 
 #define RID2RSET(r)		(((RegSet)1) << (r))
 #define RSET_EMPTY		((RegSet)0)
@@ -66,8 +68,6 @@ typedef uint32_t RegSet;
 #define rset_set(rs, r)		(rs |= RID2RSET(r))
 #define rset_clear(rs, r)	(rs &= ~RID2RSET(r))
 #define rset_exclude(rs, r)	(rs & ~RID2RSET(r))
-#define rset_picktop_(rs)	((Reg)lj_fls(rs))
-#define rset_pickbot_(rs)	((Reg)lj_ffs(rs))
 
 /* -- Register allocation cost -------------------------------------------- */
 

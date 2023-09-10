@@ -91,7 +91,6 @@ typedef struct BuildCtx {
 
 extern void owrite(BuildCtx *ctx, const void *ptr, size_t sz);
 extern void emit_asm(BuildCtx *ctx);
-extern void emit_peobj(BuildCtx *ctx);
 extern void emit_lib(BuildCtx *ctx);
 extern void emit_fold(BuildCtx *ctx);
 
