@@ -47,6 +47,8 @@ LJ_FUNC TRef lj_ir_ktrace(jit_State *J);
 
 #define lj_ir_kintp(J, k)	lj_ir_kint64(J, (uint64_t)(k))
 
+#define lj_ir_kintpgc		lj_ir_kintp
+
 static LJ_AINLINE TRef lj_ir_knum(jit_State *J, lua_Number n)
 {
   TValue tv;
