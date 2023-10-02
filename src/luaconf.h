@@ -94,7 +94,7 @@
 
 /* Configuration for the frontend (the luajit executable). */
 #if defined(luajit_c)
-#define LUA_PROGNAME	"luajit"  /* Fallback frontend name. */
+#define LUA_PROGNAME	"raptorjit"  /* Fallback frontend name. */
 #define LUA_PROMPT	"> "	/* Interactive prompt. */
 #define LUA_PROMPT2	">> "	/* Continuation prompt. */
 #define LUA_MAXINPUT	512	/* Max. input line length. */
