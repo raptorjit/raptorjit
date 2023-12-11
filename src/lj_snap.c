@@ -504,14 +504,16 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
       IRRef refp = snap_ref(sn);
       IRIns *ir = &T->ir[refp];
       if (regsp_reg(ir->r) == RID_SUNK) {
+	uint8_t m;
 	if (J->slot[snap_slot(sn)] != snap_slot(sn)) continue;
 	pass23 = 1;
 	lj_assertJ(ir->o == IR_TNEW || ir->o == IR_TDUP ||
 		   ir->o == IR_CNEW || ir->o == IR_CNEWI,
 		   "sunk parent IR %04d has bad op %d", refp - REF_BIAS, ir->o);
-	if (ir->op1 >= T->nk) snap_pref(J, T, map, nent, seen, ir->op1);
-	if (ir->op2 >= T->nk) snap_pref(J, T, map, nent, seen, ir->op2);
-        if (ir->o != IR_CNEWI) {
+	m = lj_ir_mode[ir->o];
+	if (irm_op1(m) == IRMref) snap_pref(J, T, map, nent, seen, ir->op1);
+	if (irm_op2(m) == IRMref) snap_pref(J, T, map, nent, seen, ir->op2);
+	if (ir->o != IR_CNEWI) {
 	  IRIns *irs;
 	  for (irs = ir+1; irs < irlast; irs++)
 	    if (irs->r == RID_SINK && snap_sunk_store(T, ir, irs)) {
@@ -535,14 +537,16 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
       IRIns *ir = &T->ir[refp];
       if (regsp_reg(ir->r) == RID_SUNK) {
 	TRef op1, op2;
+	uint8_t m;
 	if (J->slot[snap_slot(sn)] != snap_slot(sn)) {  /* De-dup allocs. */
 	  J->slot[snap_slot(sn)] = J->slot[J->slot[snap_slot(sn)]];
 	  continue;
 	}
 	op1 = ir->op1;
-	if (op1 >= T->nk) op1 = snap_pref(J, T, map, nent, seen, op1);
+	m = lj_ir_mode[ir->o];
+	if (irm_op1(m) == IRMref) op1 = snap_pref(J, T, map, nent, seen, op1);
 	op2 = ir->op2;
-	if (op2 >= T->nk) op2 = snap_pref(J, T, map, nent, seen, op2);
+	if (irm_op2(m) == IRMref) op2 = snap_pref(J, T, map, nent, seen, op2);
 	if (ir->o == IR_CNEWI) {
 	  J->slot[snap_slot(sn)] = emitir(ir->ot & ~(IRT_MARK|IRT_ISPHI), op1, op2);
 	} else {
