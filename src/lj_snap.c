@@ -572,9 +572,13 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 		  IRRef keyref = tref_ref(key);
 		  IRRef newref_ref = J->chain[IR_NEWREF];
 		  IRIns *newref = &J->cur.ir[newref_ref];
-		  lua_assert(irref_isk(keyref));
+		  lj_assertJ(irref_isk(keyref),
+			     "sunk store for parent IR %04d with bad key %04d",
+			     refp - REF_BIAS, keyref - REF_BIAS);
 		  if (newref_ref > allocref && newref->op2 == keyref) {
-		    lua_assert(newref->op1 == allocref);
+		    lj_assertJ(newref->op1 == allocref,
+			       "sunk store for parent IR %04d with bad tab %04d",
+			       refp - REF_BIAS, allocref - REF_BIAS);
 		    tmp = newref_ref;
 		    goto skip_newref;
 		  }
