@@ -126,7 +126,7 @@ static void bcwrite_ktab_sorted_hash(BCWriteCtx *ctx, Node *node, MSize nhash)
   TValue **heap = ctx->heap;
   MSize i = nhash;
   for (;; node--) {  /* Build heap. */
-    if (!tvisnil(&node->val)) {
+    if (!tvisnil(&node->key)) {
       bcwrite_ktabk_heap_insert(heap, --i, nhash, &node->key);
       if (i == 0) break;
     }
