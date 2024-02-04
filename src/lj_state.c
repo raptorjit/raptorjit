@@ -109,6 +109,8 @@ void lj_state_growstack(lua_State *L, MSize need)
     }
     resizestack(L, n);
   } else {  /* Request would overflow. Raise a stack overflow error. */
+    TValue *base = tvref(G(L)->jit_base);
+    if (base) L->base = base;
     if (curr_funcisL(L)) {
       L->top = curr_topL(L);
       if (L->top > tvref(L->maxstack)) {
@@ -116,7 +118,7 @@ void lj_state_growstack(lua_State *L, MSize need)
 	** dummy. This can happen when BC_IFUNCF is trying to grow the stack.
 	*/
 	L->top = L->base;
-	setframe_gc(L->base - 1, obj2gco(L));
+	setframe_gc(L->base - 1 - LJ_FR2, obj2gco(L), LJ_TTHREAD);
       }
     }
     if (L->stacksize <= LJ_STACK_MAXEX) {

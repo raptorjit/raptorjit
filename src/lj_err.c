@@ -161,7 +161,7 @@ LJ_NOINLINE void lj_err_mem(lua_State *L)
     if (LJ_UNLIKELY(L->top > tvref(L->maxstack))) {
       /* The current Lua frame violates the stack. Replace it with a dummy. */
       L->top = L->base;
-      setframe_gc(L->base - 1, obj2gco(L));
+      setframe_gc(L->base - 1 - LJ_FR2, obj2gco(L), LJ_TTHREAD);
     }
   }
   setstrV(L, L->top++, lj_err_str(L, LJ_ERR_ERRMEM));
@@ -250,6 +250,7 @@ void lj_err_stkov(lua_State *L)
   lj_err_run(L);
 }
 
+/* Rethrow error after doing a trace exit. */
 LJ_NOINLINE void lj_err_trace(lua_State *L, int errcode)
 {
   if (errcode == LUA_ERRRUN)
