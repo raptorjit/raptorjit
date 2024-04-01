@@ -1,6 +1,6 @@
 /*
 ** Debugging and introspection.
-** Copyright (C) 2005-2022 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lj_debug_c
@@ -53,8 +53,7 @@ static BCPos debug_framepc(lua_State *L, GCfunc *fn, cTValue *nextframe)
   const BCIns *ins;
   GCproto *pt;
   BCPos pos;
-  lj_assertL(fn->c.gct == ~LJ_TFUNC || fn->c.gct == ~LJ_TTHREAD,
-	     "function or frame expected");
+  lua_assert(fn->c.gct == ~LJ_TFUNC || fn->c.gct == ~LJ_TTHREAD);
   if (!isluafunc(fn)) {  /* Cannot derive a PC for non-Lua functions. */
     return NO_BCPOS;
   } else if (nextframe == NULL) {  /* Lua function on top. */
@@ -92,18 +91,14 @@ static BCPos debug_framepc(lua_State *L, GCfunc *fn, cTValue *nextframe)
 	}
       }
       ins = cframe_pc(cf);
-      if (!ins) return NO_BCPOS;
     }
   }
   pt = funcproto(fn);
   pos = proto_bcpos(pt, ins) - 1;
   if (pos > pt->sizebc) {  /* Undo the effects of lj_trace_exit for JLOOP. */
-    if (bc_isret(bc_op(ins[-1]))) {
-      GCtrace *T = (GCtrace *)((char *)(ins-1) - offsetof(GCtrace, startins));
-      pos = proto_bcpos(pt, mref(T->startpc, const BCIns));
-    } else {
-      pos = NO_BCPOS;  /* Punt in case of stack overflow for stitched trace. */
-    }
+    GCtrace *T = (GCtrace *)((char *)(ins-1) - offsetof(GCtrace, startins));
+    lua_assert(bc_isret(bc_op(ins[-1])));
+    pos = proto_bcpos(pt, mref(T->startpc, const BCIns));
   }
   return pos;
 }
@@ -126,7 +121,7 @@ static BCLine debug_frameline(lua_State *L, GCfunc *fn, cTValue *nextframe)
   BCPos pc = debug_framepc(L, fn, nextframe);
   if (pc != NO_BCPOS) {
     GCproto *pt = funcproto(fn);
-    lj_assertL(pc <= pt->sizebc, "PC out of range");
+    lua_assert(pc <= pt->sizebc);
     return lj_debug_line(pt, pc);
   }
   return -1;
@@ -207,29 +202,26 @@ static TValue *debug_localname(lua_State *L, const lua_Debug *ar,
 const char *lj_debug_uvname(GCproto *pt, uint32_t idx)
 {
   const uint8_t *p = proto_uvinfo(pt);
-  lj_assertX(idx < pt->sizeuv, "bad upvalue index");
+  lua_assert(idx < pt->sizeuv);
   if (!p) return "";
   if (idx) while (*p++ || --idx) ;
   return (const char *)p;
 }
 
 /* Get name and value of upvalue. */
-const char *lj_debug_uvnamev(cTValue *o, uint32_t idx, TValue **tvp, GCobj **op)
+const char *lj_debug_uvnamev(cTValue *o, uint32_t idx, TValue **tvp)
 {
   if (tvisfunc(o)) {
     GCfunc *fn = funcV(o);
     if (isluafunc(fn)) {
       GCproto *pt = funcproto(fn);
       if (idx < pt->sizeuv) {
-	GCobj *uvo = gcref(fn->l.uvptr[idx]);
-	*tvp = uvval(&uvo->uv);
-	*op = uvo;
+	*tvp = uvval(&gcref(fn->l.uvptr[idx])->uv);
 	return lj_debug_uvname(pt, idx);
       }
     } else {
       if (idx < fn->c.nupvalues) {
 	*tvp = &fn->c.upvalue[idx];
-	*op = obj2gco(fn);
 	return "";
       }
     }
@@ -425,21 +417,20 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
   GCfunc *fn;
   if (*what == '>') {
     TValue *func = L->top - 1;
-    if (!tvisfunc(func)) return 0;
+    api_check(L, tvisfunc(func));
     fn = funcV(func);
     L->top--;
     what++;
   } else {
     uint32_t offset = (uint32_t)ar->i_ci & 0xffff;
     uint32_t size = (uint32_t)ar->i_ci >> 16;
-    lj_assertL(offset != 0, "bad frame offset");
+    lua_assert(offset != 0);
     frame = tvref(L->stack) + offset;
     if (size) nextframe = frame + size;
-    lj_assertL(frame <= tvref(L->maxstack) &&
-	       (!nextframe || nextframe <= tvref(L->maxstack)),
-	       "broken frame chain");
+    lua_assert(frame <= tvref(L->maxstack) &&
+	       (!nextframe || nextframe <= tvref(L->maxstack)));
     fn = frame_func(frame);
-    lj_assertL(fn->c.gct == ~LJ_TFUNC, "bad frame function");
+    lua_assert(fn->c.gct == ~LJ_TFUNC);
   }
   for (; *what; what++) {
     if (*what == 'S') {

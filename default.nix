@@ -28,7 +28,6 @@ in
 # Build RaptorJIT and run multiple test suites.
 {
   raptorjit  = raptorjit;
-  raptorjit-assert  = raptorjit-assert;
   test-O3    = test "O3"    "-O3";
   test-O2    = test "O2"    "-O2";
   test-O1    = test "O1"    "-O1";

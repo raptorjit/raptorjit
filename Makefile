@@ -10,7 +10,7 @@
 # For MSVC, please follow the instructions given in src/msvcbuild.bat.
 # For MinGW and Cygwin, cd to src and run make with the Makefile there.
 #
-# Copyright (C) 2005-2022 Mike Pall. See Copyright Notice in luajit.h
+# Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
 ##############################################################################
 
 MAJVER=  1
@@ -33,8 +33,7 @@ DPREFIX= $(DESTDIR)$(PREFIX)
 INSTALL_BIN=   $(DPREFIX)/bin
 INSTALL_LIB=   $(DPREFIX)/$(MULTILIB)
 INSTALL_SHARE= $(DPREFIX)/share
-INSTALL_DEFINC= $(DPREFIX)/include/raptorjit-$(MAJVER).$(MINVER)
-INSTALL_INC=   $(INSTALL_DEFINC)
+INSTALL_INC=   $(DPREFIX)/include/raptorjit-$(MAJVER).$(MINVER)
 
 INSTALL_LJLIBD= $(INSTALL_SHARE)/raptorjit-$(VERSION)
 INSTALL_JITLIB= $(INSTALL_LJLIBD)/jit
@@ -70,12 +69,9 @@ SYMLINK= ln -sf
 INSTALL_X= install -m 0755
 INSTALL_F= install -m 0644
 UNINSTALL= $(RM)
-LDCONFIG= ldconfig -n 2>/dev/null
+LDCONFIG= ldconfig -n
 SED_PC= sed -e "s|^prefix=.*|prefix=$(PREFIX)|" \
             -e "s|^multilib=.*|multilib=$(MULTILIB)|"
-ifneq ($(INSTALL_DEFINC),$(INSTALL_INC))
-  SED_PC+= -e "s|^includedir=.*|includedir=$(INSTALL_INC)|"
-endif
 
 FILE_T= raptorjit
 FILE_A= libraptorjit.a
@@ -118,7 +114,7 @@ install: $(INSTALL_DEP)
 	$(RM) $(INSTALL_DYN) $(INSTALL_SHORT1) $(INSTALL_SHORT2)
 	cd src && test -f $(FILE_SO) && \
 	  $(INSTALL_X) $(FILE_SO) $(INSTALL_DYN) && \
-	  ( $(LDCONFIG) $(INSTALL_LIB) || : ) && \
+	  $(LDCONFIG) $(INSTALL_LIB) && \
 	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT1) && \
 	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT2) || :
 	cd etc && $(SED_PC) $(FILE_PC) > $(FILE_PC).tmp && \

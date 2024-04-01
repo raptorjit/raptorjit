@@ -1,6 +1,6 @@
 /*
 ** FFI C callback handling.
-** Copyright (C) 2005-2022 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #include "lj_obj.h"
@@ -68,12 +68,12 @@ MSize lj_ccallback_ptr2slot(CTState *cts, void *p)
 }
 
 /* Initialize machine code for callback function pointers. */
-static uint8_t *callback_mcode_init(global_State *g, uint8_t *page)
+static void callback_mcode_init(global_State *g, uint8_t *page)
 {
   uint8_t *p = page;
-  ASMFunction target = lj_vm_ffi_callback;
+  uint8_t *target = (uint8_t *)(void *)lj_vm_ffi_callback;
   MSize slot;
-  ((ASMFunction *)p)[0] = target; p += 8;
+  *(void **)p = target; p += 8;
   for (slot = 0; slot < CALLBACK_MAX_SLOT; slot++) {
     /* mov al, slot; jmp group */
     *p++ = XI_MOVrib | RID_EAX; *p++ = (uint8_t)slot;
@@ -90,7 +90,7 @@ static uint8_t *callback_mcode_init(global_State *g, uint8_t *page)
       *p++ = XI_JMPs; *p++ = (uint8_t)((2+2)*(31-(slot&31)) - 2);
     }
   }
-  return p;
+  lua_assert(p - page <= CALLBACK_MCODE_SIZE);
 }
 
 /* -- Machine code management --------------------------------------------- */
@@ -106,7 +106,7 @@ static uint8_t *callback_mcode_init(global_State *g, uint8_t *page)
 static void callback_mcode_new(CTState *cts)
 {
   size_t sz = (size_t)CALLBACK_MCODE_SIZE;
-  void *p, *pe;
+  void *p;
   if (CALLBACK_MAX_SLOT == 0)
     lj_err_caller(cts->L, LJ_ERR_FFI_CBACKOV);
   p = mmap(NULL, sz, (PROT_READ|PROT_WRITE), MAP_PRIVATE|MAP_ANONYMOUS,
@@ -114,10 +114,7 @@ static void callback_mcode_new(CTState *cts)
   if (p == MAP_FAILED)
     lj_err_caller(cts->L, LJ_ERR_FFI_CBACKOV);
   cts->cb.mcode = p;
-  pe = callback_mcode_init(cts->g, p);
-  UNUSED(pe);
-  lj_assertCTS((size_t)((char *)pe - (char *)p) <= sz,
-	       "miscalculated CALLBACK_MAX_SLOT");
+  callback_mcode_init(cts->g, p);
   lj_mcode_sync(p, (char *)p + sz);
   mprotect(p, sz, (PROT_READ|PROT_EXEC));
 }
@@ -182,13 +179,13 @@ static void callback_conv_args(CTState *cts, lua_State *L)
   if (LJ_FR2) {
     (o++)->u64 = LJ_CONT_FFI_CALLBACK;
     (o++)->u64 = rid;
+    o++;
   } else {
     o->u32.lo = LJ_CONT_FFI_CALLBACK;
     o->u32.hi = rid;
     o++;
   }
   setframe_gc(o, obj2gco(fn), fntp);
-  if (LJ_FR2) o++;
   setframe_ftsz(o, ((char *)(o+1) - (char *)L->base) + FRAME_CONT);
   L->top = L->base = ++o;
   if (!ct)
@@ -208,7 +205,7 @@ static void callback_conv_args(CTState *cts, lua_State *L)
       CTSize sz;
       int isfp;
       MSize n;
-      lj_assertCTS(ctype_isfield(ctf->info), "field expected");
+      lua_assert(ctype_isfield(ctf->info));
       cta = ctype_rawchild(cts, ctf);
       isfp = ctype_isfp(cta->info);
       sz = (cta->size + CTSIZE_PTR-1) & ~(CTSIZE_PTR-1);
@@ -261,7 +258,7 @@ lua_State * lj_ccallback_enter(CTState *cts, void *cf)
 {
   lua_State *L = cts->L;
   global_State *g = cts->g;
-  lj_assertG(L != NULL, "uninitialized cts->L in callback");
+  lua_assert(L != NULL);
   if (tvref(g->jit_base)) {
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_FFI_BADCBACK));
     if (g->panic) g->panic(L);
@@ -346,7 +343,7 @@ static CType *callback_checkfunc(CTState *cts, CType *ct)
       CType *ctf = ctype_get(cts, fid);
       if (!ctype_isattrib(ctf->info)) {
 	CType *cta;
-	lj_assertCTS(ctype_isfield(ctf->info), "field expected");
+	lua_assert(ctype_isfield(ctf->info));
 	cta = ctype_rawchild(cts, ctf);
 	if (!(ctype_isenum(cta->info) || ctype_isptr(cta->info) ||
 	      (ctype_isnum(cta->info) && cta->size <= 8)) ||

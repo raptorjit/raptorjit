@@ -1,6 +1,6 @@
 /*
 ** SINK: Allocation Sinking and Store Sinking.
-** Copyright (C) 2005-2022 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lj_opt_sink_c
@@ -35,14 +35,12 @@ static IRIns *sink_checkalloc(jit_State *J, IRIns *irs)
 }
 
 /* Recursively check whether a value depends on a PHI. */
-static int sink_phidep(jit_State *J, IRRef ref, int *workp)
+static int sink_phidep(jit_State *J, IRRef ref)
 {
   IRIns *ir = IR(ref);
-  if (!*workp) return 1;  /* Give up and pretend it does. */
-  (*workp)--;
   if (irt_isphi(ir->t)) return 1;
-  if (ir->op1 >= REF_FIRST && sink_phidep(J, ir->op1, workp)) return 1;
-  if (ir->op2 >= REF_FIRST && sink_phidep(J, ir->op2, workp)) return 1;
+  if (ir->op1 >= REF_FIRST && sink_phidep(J, ir->op1)) return 1;
+  if (ir->op2 >= REF_FIRST && sink_phidep(J, ir->op2)) return 1;
   return 0;
 }
 
@@ -57,13 +55,7 @@ static int sink_checkphi(jit_State *J, IRIns *ira, IRRef ref)
       return 1;  /* Sinkable PHI. */
     }
     /* Otherwise the value must be loop-invariant. */
-    if (ref < J->loopref) {
-      /* Check for PHI dependencies, but give up after reasonable effort. */
-      int work = 64;
-      return !sink_phidep(J, ref, &work);
-    } else {
-      return 0;  /* Loop-variant. */
-    }
+    return ref < J->loopref && !sink_phidep(J, ref);
   }
   return 1;  /* Constant (non-PHI). */
 }
@@ -85,7 +77,8 @@ static void sink_mark_ins(jit_State *J)
     switch (ir->o) {
     case IR_BASE:
       return;  /* Finished. */
-    case IR_ALOAD: case IR_HLOAD: case IR_XLOAD: case IR_TBAR: case IR_ALEN:
+    case IR_CALLL:  /* IRCALL_lj_tab_len */
+    case IR_ALOAD: case IR_HLOAD: case IR_XLOAD: case IR_TBAR:
       irt_setmark(IR(ir->op1)->t);  /* Mark ref for remaining loads. */
       break;
     case IR_FLOAD:
