@@ -245,6 +245,8 @@ DWARF_DWO= lj_dwarf.dwo
 LJVMCORE_O= $(LJVM_O) $(LJCORE_O)
 LJVMCORE_DYNO= $(LJVMCORE_O:.o=_dyn.o)
 
+LIB_VMDEF= jit/vmdef.lua
+
 LUAJIT_O= raptorjit.o
 LUAJIT_A= raptorjit.a
 LUAJIT_SO= libraptorjit.so
@@ -263,7 +265,7 @@ ALL_RM= $(ALL_T) *.o host/*.o $(WIN_RM)
 
 TARGET_O= $(LUAJIT_A)
 TARGET_T= $(LUAJIT_T) $(LUAJIT_SO)
-TARGET_DEP= $(LUAJIT_SO)
+TARGET_DEP= $(LIB_VMDEF) $(LUAJIT_SO)
 
 Q= @
 E= @echo
@@ -357,6 +359,10 @@ lj_libdef.h: $(BUILDVM_T) $(LJLIB_C)
 lj_recdef.h: $(BUILDVM_T) $(LJLIB_C)
 	$(E) "BUILDVM   $@"
 	$(Q)$(BUILDVM_X) -m recdef -o $@ $(LJLIB_C)
+
+$(LIB_VMDEF): $(BUILDVM_T) $(LJLIB_C)
+	$(E) "BUILDVM   $@"
+	$(Q)$(BUILDVM_X) -m vmdef -o $(LIB_VMDEF) $(LJLIB_C)
 
 lj_folddef.h: $(BUILDVM_T) lj_opt_fold.c
 	$(E) "BUILDVM   $@"
