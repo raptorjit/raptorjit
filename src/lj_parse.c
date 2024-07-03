@@ -2504,7 +2504,8 @@ static void parse_for_iter(LexState *ls, GCstr *indexname)
   lex_check(ls, TK_in);
   line = ls->linenumber;
   assign_adjust(ls, 3, expr_list(ls, &e), &e);
-  bcreg_bump(fs, 3);  /* The iterator needs another 3 slots (func + 2 args). */
+  /* The iterator needs another 3 [4] slots (func [pc] | state ctl). */
+  bcreg_bump(fs, 3+ls->fr2);
   isnext = (nvars <= 5 && fs->pc > exprpc && predict_next(ls, fs, exprpc));
   var_add(ls, 3);  /* Hidden control variables. */
   lex_check(ls, TK_do);
