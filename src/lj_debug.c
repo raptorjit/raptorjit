@@ -103,7 +103,7 @@ static BCPos debug_framepc(lua_State *L, GCfunc *fn, cTValue *nextframe)
       GCtrace *T = (GCtrace *)((char *)(ins-1) - offsetof(GCtrace, startins));
       pos = proto_bcpos(pt, mref(T->startpc, const BCIns));
     } else {
-      pos = NO_BCPOS;  /* Punt in case of stack overflow for stitched trace. */
+      pos = NO_BCPOS;  /* Punt in case of stack overflow. */
     }
   }
   return pos;
