@@ -323,7 +323,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
     }
     dp = ((uint8_t *)cc->stack) + nsp;
     nsp += CCALL_PACK_STACKARG ? sz : n * CTSIZE_PTR;
-    if ((int32_t)nsp > CCALL_SIZE_STACK) {  /* Too many arguments. */
+    if (nsp > CCALL_SIZE_STACK) {  /* Too many arguments. */
     err_nyi:
       lj_err_caller(L, LJ_ERR_FFI_NYICALL);
     }
