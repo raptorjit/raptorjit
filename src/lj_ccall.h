@@ -43,9 +43,6 @@ typedef intptr_t GPRArg;
 #ifndef CCALL_ALIGN_STACKARG
 #define CCALL_ALIGN_STACKARG	1
 #endif
-#ifndef CCALL_PACK_STACKARG
-#define CCALL_PACK_STACKARG	0
-#endif
 #ifndef CCALL_ALIGN_CALLSTATE
 #define CCALL_ALIGN_CALLSTATE	8
 #endif
