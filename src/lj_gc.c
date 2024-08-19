@@ -498,7 +498,6 @@ static void gc_finalize(lua_State *L)
     setcdataV(L, &tmp, gco2cd(o));
     tv = lj_tab_set(L, tabref(g->gcroot[GCROOT_FFI_FIN]), &tmp);
     if (!tvisnil(tv)) {
-      g->gc.nocdatafin = 0;
       copyTV(L, &tmp, tv);
       setnilV(tv);  /* Clear entry in finalizer table. */
       gc_call_finalizer(g, L, &tmp, o);
@@ -630,7 +629,6 @@ static size_t gc_onestep(lua_State *L)
 	lj_str_resize(L, g->strmask >> 1);  /* Shrink string table. */
       if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */
 	g->gc.state = GCSfinalize;
-	g->gc.nocdatafin = 1;
       } else {  /* Otherwise skip this phase to help the JIT. */
 	g->gc.state = GCSpause;  /* End of GC cycle. */
 	g->gc.debt = 0;
@@ -650,7 +648,6 @@ static size_t gc_onestep(lua_State *L)
 	g->gc.estimate -= GCFINALIZECOST;
       return GCFINALIZECOST;
     }
-    if (!g->gc.nocdatafin) lj_tab_rehash(L, tabref(g->gcroot[GCROOT_FFI_FIN]));
     g->gc.state = GCSpause;  /* End of GC cycle. */
     g->gc.debt = 0;
     return 0;

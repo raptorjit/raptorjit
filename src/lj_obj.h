@@ -498,7 +498,7 @@ typedef struct GCState {
   GCSize threshold;	/* Memory threshold. */
   uint8_t currentwhite;	/* Current white color. */
   uint8_t state;	/* GC state. */
-  uint8_t nocdatafin;	/* No cdata finalizer called. */
+  uint8_t unused0;
   uint8_t lightudnum;	/* Number of lightuserdata segments - 1. */
   MSize sweepstr;	/* Sweep position in string table. */
   GCRef root;		/* List of all collectable objects. */
