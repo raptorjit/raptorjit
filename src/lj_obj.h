@@ -849,7 +849,7 @@ LJ_ASMF LJ_CONSTF int64_t lj_vm_num2int_check(double x);
 ** The uint64_t conversion accepts the union of the unsigned + signed range.
 */
 LJ_ASMF LJ_CONSTF int64_t lj_vm_num2i64(double x);
-LJ_ASMF LJ_CONSTF int64_t lj_vm_num2u64(double x);
+LJ_ASMF LJ_CONSTF uint64_t lj_vm_num2u64(double x);
 
 #define lj_num2i64(x)		(lj_vm_num2i64((x)))
 #define lj_num2u64(x)		(lj_vm_num2u64((x)))
