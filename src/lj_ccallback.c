@@ -271,6 +271,7 @@ lua_State * lj_ccallback_enter(CTState *cts, void *cf)
     exit(EXIT_FAILURE);
   }
   lj_trace_abort(g);  /* Never record across callback. */
+  setgcref(g->cur_L, obj2gco(L));
   /* Setup C frame. */
   cframe_prev(cf) = L->cframe;
   setcframe_L(cf, L);
