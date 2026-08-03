@@ -283,7 +283,8 @@ static void asm_fusexref(ASMState *as, IRRef ref, RegSet allow)
       as->mrm.base = RID_DISPATCH;
       return;
     }
-  } else if (ir->o == IR_STRREF) {
+  }
+  if (ir->o == IR_STRREF) {
     asm_fusestrref(as, ir, allow);
   } else {
     as->mrm.ofs = 0;
