@@ -441,11 +441,8 @@ static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
   conv_I_F:
     if (dsize < 8) {
       lj_needsplit(J);
-      sp = emitconv(sp, IRT_I64, st, IRCONV_ANY);
-      sp = emitconv(sp, dsize < 4 ? IRT_INT : dt, IRT_I64, 0);
-    } else {
-      sp = emitconv(sp, dt, st, IRCONV_ANY);
     }
+    sp = emitconv(sp, dsize < 4 ? IRT_INT : dt, st, IRCONV_ANY);
     goto xstore;
   case CCX(I, P):
   case CCX(I, A):
