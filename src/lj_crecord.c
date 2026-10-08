@@ -207,7 +207,7 @@ static void crec_copy_emit(jit_State *J, CRecMemList *ml, MSize mlp,
     ml[i].trval = emitir(IRT(IR_XLOAD, ml[i].tp), trsptr, 0);
     ml[i].trofs = trofs;
     i++;
-    rwin += (LJ_SOFTFP && ml[i].tp == IRT_NUM) ? 2 : 1;
+    rwin += 1;
     if (rwin >= CREC_COPY_REGWIN || i >= mlp) {  /* Flush buffered stores. */
       rwin = 0;
       for ( ; j < i; j++) {
