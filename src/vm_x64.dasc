@@ -1480,7 +1480,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->vm_return
   |
   |.macro math_round, func
-  |  .ffunc math_ .. func
+  |  .ffunc_1 math_ .. func
   |  checknumtp [BASE], ->fff_fallback
   |  movsd xmm0, qword [BASE]
   |  call ->vm_ .. func .. _sse
