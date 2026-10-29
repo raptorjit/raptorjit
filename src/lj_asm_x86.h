@@ -661,8 +661,9 @@ static void asm_tobit(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg tmp = ra_scratch(as, RSET_FPR);
-  Reg right = asm_fuseload(as, ir->op2, rset_exclude(RSET_FPR, tmp));
+  Reg right;
   emit_rr(as, XO_MOVDto, tmp, dest);
+  right = asm_fuseload(as, ir->op2, rset_exclude(RSET_FPR, tmp));
   emit_mrm(as, XO_ADDSD, tmp, right);
   ra_left(as, tmp, ir->op1);
 }
@@ -706,7 +707,7 @@ static void asm_conv(ASMState *as, IRIns *ir)
       x86Op op = st == IRT_NUM ? XO_CVTTSD2SI : XO_CVTTSS2SI;
       lj_assertA(!irt_isu32(ir->t), "bad CONV u32.fp emitted");
       if (irt_isu64(ir->t)) {
-	/* LJ_64: For inputs >= 2^63 add -2^64, convert again. */
+	/* For the indefinite result -2^63, add -2^64 and convert again. */
 	Reg tmp = ra_scratch(as, RSET_FPR);
 	MCLabel l_end = emit_label(as);
 	emit_rr(as, op, dest|REX_64, tmp);
