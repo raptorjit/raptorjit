@@ -511,7 +511,7 @@ static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
     goto xstore;
   case CCX(P, I):
     if (st == IRT_CDATA) goto err_nyi;
-    if (ssize < 8 && !(sinfo & CTF_UNSIGNED))
+    if (ssize < 8 && dsize == 8 && !(sinfo & CTF_UNSIGNED))
       sp = emitconv(sp, IRT_I64, IRT_INT, IRCONV_SEXT);
     goto xstore;
   case CCX(P, F):
